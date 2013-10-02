@@ -1,0 +1,50 @@
+#!/bin/bash
+# ceph-health-cron
+#
+# Reports the health of a ceph cluster.
+# Should be run hourly on the 59th minute on all your ceph mons; only one 
+# will report at each hour.
+#
+# Author: Dan van der Ster (daniel.vanderster@cern.ch)
+# 
+# Usage:
+# ./ceph-health-cron <# mons> <mon id, 0 indexed>
+# 
+# Example:
+# ./ceph-health-cron 5 <0|1|2|3|4>
+#
+
+# rotate through the mons whose turn it is to run the health script
+NMONS=$1
+ID=$2
+ROTA=$(( $( date +%k ) % $NMONS ))
+if [ "$ID" != "$ROTA" ]
+then
+    exit
+fi
+
+# check for down osd's
+DOWNOSD=$(ceph osd tree | egrep '0\s+$')
+if [ "$DOWNOSD" ]
+then
+    echo Down OSDs:
+    ceph osd tree | egrep '0\s+$'
+    echo
+fi
+
+# check for WRN or DBG log messages in the past hour
+WARNINGS=$(grep -v INF /var/log/ceph/ceph.log | grep "$( date +"%Y-%m-%d %H" )")
+if [ "$WARNINGS" ]
+then
+    echo Warnings in ceph.log:
+    grep -v INF /var/log/ceph/ceph.log | grep "$( date +"%Y-%m-%d %H" )"
+    echo
+fi
+
+# check ceph health
+HEALTH=$(ceph health)
+if [ "$HEALTH" != 'HEALTH_OK' ]
+then
+    echo Ceph is not healthy:
+    ceph health detail
+fi
