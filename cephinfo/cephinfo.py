@@ -84,6 +84,8 @@ def get_pg_states():
     "inactive" : 0,
     "remapped" : 0,
     "deep" : 0,
+    "backfilling" : 0,
+    "recovering" : 0,
   }
   for pg in get_pg_stats():
     state = pg["state"]
