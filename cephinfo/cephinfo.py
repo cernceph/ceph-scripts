@@ -9,18 +9,31 @@
 
 import commands, json, string, sys
 
-def get_json():
+def init_mon():
   global mon_data
-  global osd_data
-  global pg_data
-
   mon_json = commands.getoutput('ceph mon dump --format=json 2>/dev/null')
-  pg_json  = commands.getoutput('ceph pg  dump --format=json 2>/dev/null')
-  osd_json = commands.getoutput('ceph osd dump --format=json 2>/dev/null')
-
   mon_data = json.loads(mon_json)
+
+def init_osd():
+  global osd_data
+  osd_json = commands.getoutput('ceph osd dump --format=json 2>/dev/null')
   osd_data = json.loads(osd_json)
-  pg_data  = json.loads(pg_json)
+
+def init_pg():
+  global pg_data
+  pg_json = commands.getoutput('ceph pg  dump --format=json 2>/dev/null')
+  pg_data = json.loads(pg_json)
+
+def init_auth():
+  global auth_data
+  auth_json = commands.getoutput('ceph auth list --format=json 2>/dev/null')
+  auth_data = json.loads(auth_json)
+
+def get_json():
+  init_mon()
+  init_osd()
+  init_pg()
+  init_auth()
 
 def get_pools_data():
   return list(osd_data['pools'])
