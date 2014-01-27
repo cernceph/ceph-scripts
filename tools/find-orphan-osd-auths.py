@@ -3,7 +3,8 @@
 import commands
 from cephinfo import cephinfo
 
-cephinfo.get_json()
+cephinfo.init_auth()
+cephinfo.init_osd()
 
 yesno = 'n'
 
