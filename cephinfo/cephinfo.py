@@ -9,6 +9,11 @@
 
 import commands, json, string, sys
 
+def init_df():
+  global df_data
+  df_json = commands.getoutput('ceph df --format=json 2>/dev/null')
+  df_data = json.loads(df_json)
+
 def init_mon():
   global mon_data
   mon_json = commands.getoutput('ceph mon dump --format=json 2>/dev/null')
@@ -117,6 +122,18 @@ def get_n_mons():
 
 def get_n_mons_quorum():
   return len(mon_data['quorum'])
+
+def get_latency():
+  latency_ms = commands.getoutput('rados -p test bench 10 write -t 1 -b 65536 2>/dev/null | grep Average | awk \'{print 1000*$3}\'')
+  return float(latency_ms)
+
+def get_n_openstack_volumes():
+  n = commands.getoutput('rbd ls -p volumes 2>/dev/null | wc -l')
+  return int(n)
+
+def get_n_openstack_images():
+  n = commands.getoutput('rbd ls -p images 2>/dev/null | wc -l')
+  return int(n)
 
 if __name__ == "__main__":
   # basic testing

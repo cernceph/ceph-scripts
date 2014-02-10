@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+
+from collections import defaultdict
+from cephinfo import cephinfo
+import sys
+
+all = False
+if len(sys.argv) > 1:
+  pool = sys.argv[1]
+  if pool == 'all':
+    all = True
+  else:
+    pool = int(sys.argv[1])
+else:
+  print "Usage: ceph-pool-pg-distribution <pool number>"
+  sys.exit(1)
+
+cephinfo.init_pg()
+
+osds_d = defaultdict(int)
+total_pgs = 0
+
+for pg in cephinfo.get_pg_stats():
+  if not all and not pg['pgid'].startswith('%d.' % pool):
+    continue
+  total_pgs += 1
+  for osd in pg['acting']:
+    osds_d[osd] += 1
+
+total_osds = len(osds_d.keys())
+
+print "Summary:",total_pgs,"pgs on",total_osds,"osds"
+print
+print "Num OSDs with X PGs:"
+
+count_d = defaultdict(int)
+for value in osds_d.values():
+    count_d[value] += 1
+
+for k in sorted(count_d.keys()):
+    print "%d:" % k, count_d[k]
