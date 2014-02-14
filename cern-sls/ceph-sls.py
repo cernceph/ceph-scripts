@@ -16,7 +16,6 @@ def get_availability():
   if health == 'HEALTH_OK':
     return 100
 
-
   n_pgs = cephinfo.get_n_pgs()
   pg_states = cephinfo.get_pg_states()
   a_pgs = math.floor(100.0 * pg_states['active'] / n_pgs)
@@ -33,6 +32,7 @@ def write_xml():
   osd_states = cephinfo.get_osd_states()
   osd_stats_sum = cephinfo.get_osd_stats_sum()
   pg_stats_sum = cephinfo.get_pg_stats_sum()['stat_sum']
+  pg_map = cephinfo.stat_data['pgmap']
   context = {
     "timestamp"          : commands.getoutput('date +%Y-%m-%dT%H:%M:%S'),
     "availability"       : get_availability(),
@@ -54,6 +54,12 @@ def write_xml():
     "n_objects_unfound"  : pg_stats_sum['num_objects_unfound'],
     "n_read_gb"          : pg_stats_sum['num_read_kb'] / 1024 / 1024,
     "n_write_gb"         : pg_stats_sum['num_write_kb'] / 1024 / 1024,
+    "latency_ms"         : cephinfo.get_latency(),
+    "n_openstack_volumes": cephinfo.get_n_openstack_volumes(),
+    "n_openstack_images" : cephinfo.get_n_openstack_images(),
+    "op_per_sec"         : pg_map['op_per_sec'],
+    "read_mb_sec"        : pg_map['read_bytes_sec'] / 1024 / 1024,
+    "write_mb_sec"       : pg_map['write_bytes_sec'] / 1024 / 1024,
   } 
   template = """<?xml version="1.0" encoding="utf-8"?>
 
@@ -74,9 +80,9 @@ def write_xml():
         <refreshperiod>PT15M</refreshperiod>
  
         <availabilitythresholds>
-                <threshold level="available">100</threshold>
-                <threshold level="affected">95</threshold>
-                <threshold level="degraded">90</threshold>
+                <threshold level="available">98</threshold>
+                <threshold level="affected">90</threshold>
+                <threshold level="degraded">80</threshold>
         </availabilitythresholds>
 
         <data>
@@ -98,6 +104,12 @@ def write_xml():
 		<numericvalue name="n_objects_unfound" desc="Num Objects Unfound">{n_objects_unfound}</numericvalue>
 		<numericvalue name="n_read_gb" desc="Total Read (GB)">{n_read_gb}</numericvalue>
 		<numericvalue name="n_write_gb" desc="Total Write (GB)">{n_write_gb}</numericvalue>
+		<numericvalue name="latency_ms" desc="64KB Write Latency (ms)">{latency_ms}</numericvalue>
+		<numericvalue name="n_openstack_volumes" desc="Num OpenStack Volumes">{n_openstack_volumes}</numericvalue>
+		<numericvalue name="n_openstack_images" desc="Num OpenStack Images">{n_openstack_images}</numericvalue>
+		<numericvalue name="op_per_sec" desc="Operations Per Second">{op_per_sec}</numericvalue>
+		<numericvalue name="read_mb_sec" desc="Read MB/s">{read_mb_sec}</numericvalue>
+		<numericvalue name="write_mb_sec" desc="Write MB/s">{write_mb_sec}</numericvalue>
 	</data>
 
         <lemon>

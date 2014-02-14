@@ -34,11 +34,17 @@ def init_auth():
   auth_json = commands.getoutput('ceph auth list --format=json 2>/dev/null')
   auth_data = json.loads(auth_json)
 
+def init_stat():
+  global stat_data
+  stat_json = commands.getoutput('ceph -s -f json 2>/dev/null')
+  stat_data = json.loads(stat_json)
+
 def get_json():
   init_mon()
   init_osd()
   init_pg()
   init_auth()
+  init_stat()
 
 def get_pools_data():
   return list(osd_data['pools'])
