@@ -130,8 +130,8 @@ def get_n_mons_quorum():
   return len(mon_data['quorum'])
 
 def get_latency():
-  latency_ms = commands.getoutput('rados -p test bench 10 write -t 1 -b 65536 2>/dev/null | grep Average | awk \'{print 1000*$3}\'')
-  return float(latency_ms)
+  latency_ms = commands.getoutput('rados -p test bench 10 write -t 1 -b 65536 2>/dev/null | grep -i latency | awk \'{print 1000*$3}\'').split()
+  return [float(x) for x in latency_ms]
 
 def get_n_openstack_volumes():
   n = commands.getoutput('rbd ls -p volumes 2>/dev/null | wc -l')
