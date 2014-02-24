@@ -33,6 +33,7 @@ def write_xml():
   osd_stats_sum = cephinfo.get_osd_stats_sum()
   pg_stats_sum = cephinfo.get_pg_stats_sum()['stat_sum']
   pg_map = cephinfo.stat_data['pgmap']
+  latency = cephinfo.get_latency()
   context = {
     "timestamp"          : commands.getoutput('date +%Y-%m-%dT%H:%M:%S'),
     "availability"       : get_availability(),
@@ -54,7 +55,9 @@ def write_xml():
     "n_objects_unfound"  : pg_stats_sum['num_objects_unfound'],
     "n_read_gb"          : pg_stats_sum['num_read_kb'] / 1024 / 1024,
     "n_write_gb"         : pg_stats_sum['num_write_kb'] / 1024 / 1024,
-    "latency_ms"         : cephinfo.get_latency(),
+    "latency_ms"         : latency[0],
+    "latency_max_ms"     : latency[2],
+    "latency_min_ms"     : latency[3],
     "n_openstack_volumes": cephinfo.get_n_openstack_volumes(),
     "n_openstack_images" : cephinfo.get_n_openstack_images(),
     "op_per_sec"         : pg_map['op_per_sec'],
@@ -104,7 +107,11 @@ def write_xml():
 		<numericvalue name="n_objects_unfound" desc="Num Objects Unfound">{n_objects_unfound}</numericvalue>
 		<numericvalue name="n_read_gb" desc="Total Read (GB)">{n_read_gb}</numericvalue>
 		<numericvalue name="n_write_gb" desc="Total Write (GB)">{n_write_gb}</numericvalue>
-		<numericvalue name="latency_ms" desc="64KB Write Latency (ms)">{latency_ms}</numericvalue>
+                <grp name="64KB Write Latency (ms)">
+		    <numericvalue name="latency_ms" desc="Average">{latency_ms}</numericvalue>
+		    <numericvalue name="latency_max_ms" desc="Max">{latency_max_ms}</numericvalue>
+		    <numericvalue name="latency_min_ms" desc="Min">{latency_min_ms}</numericvalue>
+                </grp>
 		<numericvalue name="n_openstack_volumes" desc="Num OpenStack Volumes">{n_openstack_volumes}</numericvalue>
 		<numericvalue name="n_openstack_images" desc="Num OpenStack Images">{n_openstack_images}</numericvalue>
 		<numericvalue name="op_per_sec" desc="Operations Per Second">{op_per_sec}</numericvalue>
