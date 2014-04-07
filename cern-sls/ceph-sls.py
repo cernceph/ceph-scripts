@@ -141,8 +141,7 @@ def write_xml():
         </lemon>
 
 	<servicemanagers>
-		<servicemanager email="Arne.Wiebalck@cern.ch" login="wiebalck" main="false">Arne Wiebalck</servicemanager>
-		<servicemanager email="daniel.vanderster@cern.ch" login="dvanders" main="false">Dan van der Ster</servicemanager>
+		<servicemanager email="daniel.vanderster@cern.ch" login="dvanders" main="true">Dan van der Ster</servicemanager>
 	</servicemanagers>
 
 </serviceupdate>"""
