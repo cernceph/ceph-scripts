@@ -24,7 +24,7 @@ for entry in cephinfo.auth_data['auth_dump']:
       print cmd
       print commands.getoutput(cmd)
     else:
-      cmd = "ceph auth del %s" % entity
+      cmd = "echo ceph auth del %s" % entity
       yesno = raw_input("Should I run '%s' for you? [y,N,all]: " % cmd)
       if yesno.lower() in ('y','yes'):
         print cmd
