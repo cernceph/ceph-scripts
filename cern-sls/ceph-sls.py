@@ -89,34 +89,50 @@ def write_xml():
         </availabilitythresholds>
 
         <data>
-		<numericvalue name="n_mons" desc="Num Mons">{n_mons}</numericvalue>
-		<numericvalue name="n_quorum" desc="Num Mons in Quorum">{n_quorum}</numericvalue>
+                <grp name="Monitors">
+		    <numericvalue name="n_mons" desc="Num Mons">{n_mons}</numericvalue>
+		    <numericvalue name="n_quorum" desc="Num Mons in Quorum">{n_quorum}</numericvalue>
+                </grp>
 		<numericvalue name="n_pools" desc="Num Pools">{n_pools}</numericvalue>
-		<numericvalue name="n_osds" desc="Num OSDs">{n_osds}</numericvalue>
-		<numericvalue name="n_osds_up" desc="Num OSDs Up">{n_osds_up}</numericvalue>
-		<numericvalue name="n_osds_in" desc="Num OSDs In">{n_osds_in}</numericvalue>
-		<numericvalue name="n_pgs" desc="Num PGs">{n_pgs}</numericvalue>
-		<numericvalue name="n_pgs_active" desc="Num PGs Active">{n_pgs_active}</numericvalue>
-		<numericvalue name="n_osd_gb_total" desc="OSD Gigabytes Total">{n_osd_gb_total}</numericvalue>
-		<numericvalue name="n_osd_gb_used" desc="OSD Gigabytes Used">{n_osd_gb_used}</numericvalue>
-		<numericvalue name="n_osd_gb_avail" desc="OSD Gigabytes Avail">{n_osd_gb_avail}</numericvalue>
-		<numericvalue name="n_pg_gbytes" desc="PG Gigabytes">{n_pg_gbytes}</numericvalue>
-		<numericvalue name="n_objects" desc="Num Objects">{n_objects}</numericvalue>
-		<numericvalue name="n_object_copies" desc="Num Object Copies">{n_object_copies}</numericvalue>
-		<numericvalue name="n_objects_degraded" desc="Num Objects Degraded">{n_objects_degraded}</numericvalue>
-		<numericvalue name="n_objects_unfound" desc="Num Objects Unfound">{n_objects_unfound}</numericvalue>
-		<numericvalue name="n_read_gb" desc="Total Read (GB)">{n_read_gb}</numericvalue>
-		<numericvalue name="n_write_gb" desc="Total Write (GB)">{n_write_gb}</numericvalue>
+                <grp name="OSDs">
+		    <numericvalue name="n_osds" desc="Num OSDs">{n_osds}</numericvalue>
+		    <numericvalue name="n_osds_up" desc="Num OSDs Up">{n_osds_up}</numericvalue>
+		    <numericvalue name="n_osds_in" desc="Num OSDs In">{n_osds_in}</numericvalue>
+                </grp>
+                <grp name="PGs">
+		    <numericvalue name="n_pgs" desc="Num PGs">{n_pgs}</numericvalue>
+		    <numericvalue name="n_pgs_active" desc="Num PGs Active">{n_pgs_active}</numericvalue>
+                </grp>
+                <grp name="Disk Space">
+		    <numericvalue name="n_osd_gb_total" desc="OSD Gigabytes Total">{n_osd_gb_total}</numericvalue>
+		    <numericvalue name="n_osd_gb_used" desc="OSD Gigabytes Used">{n_osd_gb_used}</numericvalue>
+		    <numericvalue name="n_osd_gb_avail" desc="OSD Gigabytes Avail">{n_osd_gb_avail}</numericvalue>
+		    <numericvalue name="n_pg_gbytes" desc="PG Gigabytes">{n_pg_gbytes}</numericvalue>
+                </grp>
+                <grp name="Objects">
+		    <numericvalue name="n_objects" desc="Num Objects">{n_objects}</numericvalue>
+		    <numericvalue name="n_object_copies" desc="Num Object Copies">{n_object_copies}</numericvalue>
+		    <numericvalue name="n_objects_degraded" desc="Num Objects Degraded">{n_objects_degraded}</numericvalue>
+		    <numericvalue name="n_objects_unfound" desc="Num Objects Unfound">{n_objects_unfound}</numericvalue>
+                </grp>
+                <grp name="Total RW">
+		    <numericvalue name="n_read_gb" desc="Total Read (GB)">{n_read_gb}</numericvalue>
+		    <numericvalue name="n_write_gb" desc="Total Write (GB)">{n_write_gb}</numericvalue>
+                </grp>
                 <grp name="64KB Write Latency (ms)">
 		    <numericvalue name="latency_ms" desc="Average">{latency_ms}</numericvalue>
 		    <numericvalue name="latency_max_ms" desc="Max">{latency_max_ms}</numericvalue>
 		    <numericvalue name="latency_min_ms" desc="Min">{latency_min_ms}</numericvalue>
                 </grp>
-		<numericvalue name="n_openstack_volumes" desc="Num OpenStack Volumes">{n_openstack_volumes}</numericvalue>
-		<numericvalue name="n_openstack_images" desc="Num OpenStack Images">{n_openstack_images}</numericvalue>
+                <grp name="OpenStack">
+		    <numericvalue name="n_openstack_volumes" desc="Num OpenStack Volumes">{n_openstack_volumes}</numericvalue>
+		    <numericvalue name="n_openstack_images" desc="Num OpenStack Images">{n_openstack_images}</numericvalue>
+                </grp>
+                <grp name="Throughput">
+		    <numericvalue name="read_mb_sec" desc="Read MB/s">{read_mb_sec}</numericvalue>
+		    <numericvalue name="write_mb_sec" desc="Write MB/s">{write_mb_sec}</numericvalue>
+                </grp>
 		<numericvalue name="op_per_sec" desc="Operations Per Second">{op_per_sec}</numericvalue>
-		<numericvalue name="read_mb_sec" desc="Read MB/s">{read_mb_sec}</numericvalue>
-		<numericvalue name="write_mb_sec" desc="Write MB/s">{write_mb_sec}</numericvalue>
 	</data>
 
         <lemon>
