@@ -2,17 +2,21 @@
 # ceph-health-cron
 #
 # Reports the health of a ceph cluster.
-# Should be run hourly on the 59th minute on all your ceph mons; only one 
-# will report at each hour.
+# Should be run hourly on all your ceph mons; but at most one
+# will email you each hour.
 #
 # Author: Dan van der Ster (daniel.vanderster@cern.ch)
-# 
+#
 # Usage:
-# ./ceph-health-cron <# mons> <mon id, 0 indexed>
-# 
+# ./ceph-health-cron <# mons> <mon id, starting with 0>
+#
 # Example:
 # ./ceph-health-cron 5 <0|1|2|3|4>
-#
+
+if [[ $# -lt 2 ]] ; then
+    echo "Usage: $0 <# monitors> <this mon id>"
+    exit 0
+fi
 
 # rotate through the mons whose turn it is to run the health script
 NMONS=$1
@@ -23,28 +27,54 @@ then
     exit
 fi
 
-# check for down osd's
-DOWNOSD=$(ceph osd tree | egrep '0\s+$')
-if [ "$DOWNOSD" ]
-then
-    echo Down OSDs:
-    ceph osd tree | egrep '0\s+$'
-    echo
-fi
-
-# check for WRN or DBG log messages in the past hour
-WARNINGS=$(grep -v INF /var/log/ceph/ceph.log | grep "$( date +"%Y-%m-%d %H" )")
-if [ "$WARNINGS" ]
-then
-    echo Warnings in ceph.log:
-    grep -v INF /var/log/ceph/ceph.log | grep "$( date +"%Y-%m-%d %H" )"
-    echo
-fi
-
 # check ceph health
 HEALTH=$(ceph health)
 if [ "$HEALTH" != 'HEALTH_OK' ]
 then
     echo Ceph is not healthy:
     ceph health detail
+    echo
 fi
+
+# get logs for last hour
+rm -f /tmp/ceph.log.lasthour
+for (( i = 60; i >= 0; i-- )) ; do
+    DATE=`date +'%Y-%m-%d %H:%M' -d "$i minutes ago"`
+    sed -n -e "/${DATE}/p" /var/log/ceph/ceph.log >> /tmp/ceph.log.lasthour
+done
+
+# check for WRN or DBG log messages in the past hour
+WARNINGS=$(grep -v INF /tmp/ceph.log.lasthour)
+if [ "$WARNINGS" ]
+then
+    echo Warnings in ceph.log: $(grep -v INF /tmp/ceph.log.lasthour | wc -l)
+    echo
+fi
+
+# check for down osd's
+DOWNOSD=$(egrep 'out|down|fail|boot' /tmp/ceph.log.lasthour | grep -v pgmap)
+if [ "$DOWNOSD" ]
+then
+    echo Out/Down/Failed OSDs:
+    egrep 'out|down|fail|boot' /tmp/ceph.log.lasthour | grep -v pgmap
+    echo
+fi
+
+# check for slow requests
+SLOW=$(grep slow /tmp/ceph.log.lasthour | grep oldest)
+if [ "$SLOW" ]
+then
+    echo Slow Requests:
+    grep slow /tmp/ceph.log.lasthour | grep oldest
+    echo
+fi
+
+# check for monitor elections
+ELEC=$(grep election /tmp/ceph.log.lasthour)
+if [ "$ELEC" ]
+then
+    echo Monitor Elections:
+    grep election /tmp/ceph.log.lasthour
+    echo
+fi
+
