@@ -5,7 +5,9 @@
 # Should be run hourly on all your ceph mons; but at most one
 # will email you each hour.
 #
-# Author: Dan van der Ster (daniel.vanderster@cern.ch)
+# Contributors:
+#    Dan van der Ster (daniel.vanderster@cern.ch)
+#    Matthias Schoenberg (kontakt@ms-itd.de)
 #
 # Usage:
 # ./ceph-health-cron <# mons> <mon id, starting with 0>
@@ -13,7 +15,8 @@
 # Example:
 # ./ceph-health-cron 5 <0|1|2|3|4>
 
-if [[ $# -lt 2 ]] ; then
+if [[ $# -lt 2 ]]
+then
     echo "Usage: $0 <# monitors> <this mon id>"
     exit 0
 fi
@@ -28,26 +31,29 @@ then
 fi
 
 # check ceph health
-HEALTH=$(ceph health)
+HEALTH=$(timeout 30 ceph health)
+if [ "$?" = 124 ] #timeout's exit code is 124 when the timeout is hit
+then
+    HEALTH="ceph health timed out (30s), potential loss of quorum!" #using $HEALTH since it wouldn't get initialized when it times out
+fi
+
 if [ "$HEALTH" != 'HEALTH_OK' ]
 then
-    echo Ceph is not healthy:
-    ceph health detail
+    echo -n "Ceph is not healthy: "
+    echo "$HEALTH"
     echo
 fi
 
 # get logs for last hour
 rm -f /tmp/ceph.log.lasthour
-for (( i = 60; i >= 0; i-- )) ; do
-    DATE=`date +'%Y-%m-%d %H:%M' -d "$i minutes ago"`
-    sed -n -e "/${DATE}/p" /var/log/ceph/ceph.log >> /tmp/ceph.log.lasthour
-done
+awk -vTIME=`date -d'now-1 hours' +%H:%M:%S` ' { if ($2 > TIME) print $0}' /var/log/ceph/ceph.log >> /tmp/ceph.log.lasthour
 
 # check for WRN or DBG log messages in the past hour
 WARNINGS=$(grep -v INF /tmp/ceph.log.lasthour)
 if [ "$WARNINGS" ]
 then
-    echo Warnings in ceph.log: $(grep -v INF /tmp/ceph.log.lasthour | wc -l)
+    echo -n "Warnings in ceph.log: "
+    echo "$WARNINGS"|wc -l
     echo
 fi
 
@@ -55,8 +61,8 @@ fi
 DOWNOSD=$(egrep 'out|down|fail|boot' /tmp/ceph.log.lasthour | grep -v pgmap)
 if [ "$DOWNOSD" ]
 then
-    echo Out/Down/Failed OSDs:
-    egrep 'out|down|fail|boot' /tmp/ceph.log.lasthour | grep -v pgmap
+    echo Out/Down/Failed/Booted OSDs:
+    echo "$DOWNOSD"
     echo
 fi
 
@@ -65,7 +71,7 @@ SLOW=$(grep slow /tmp/ceph.log.lasthour | grep oldest)
 if [ "$SLOW" ]
 then
     echo Slow Requests:
-    grep slow /tmp/ceph.log.lasthour | grep oldest
+    echo "$SLOW"
     echo
 fi
 
@@ -74,7 +80,6 @@ ELEC=$(grep election /tmp/ceph.log.lasthour)
 if [ "$ELEC" ]
 then
     echo Monitor Elections:
-    grep election /tmp/ceph.log.lasthour
+    echo "$ELEC"
     echo
 fi
-
