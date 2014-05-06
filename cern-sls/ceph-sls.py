@@ -34,6 +34,7 @@ def write_xml():
   pg_stats_sum = cephinfo.get_pg_stats_sum()['stat_sum']
   pg_map = cephinfo.stat_data['pgmap']
   latency = cephinfo.get_latency()
+  activity = cephinfo.get_smooth_activity(10)
   context = {
     "timestamp"          : commands.getoutput('date +%Y-%m-%dT%H:%M:%S'),
     "availability"       : get_availability(),
@@ -60,9 +61,9 @@ def write_xml():
     "latency_min_ms"     : latency[3],
     "n_openstack_volumes": cephinfo.get_n_openstack_volumes(),
     "n_openstack_images" : cephinfo.get_n_openstack_images(),
-    "op_per_sec"         : pg_map['op_per_sec'],
-    "read_mb_sec"        : pg_map['read_bytes_sec'] / 1024 / 1024,
-    "write_mb_sec"       : pg_map['write_bytes_sec'] / 1024 / 1024,
+    "op_per_sec"         : activity[0],
+    "read_mb_sec"        : activity[1],
+    "write_mb_sec"       : activity[2],
   } 
   template = """<?xml version="1.0" encoding="utf-8"?>
 

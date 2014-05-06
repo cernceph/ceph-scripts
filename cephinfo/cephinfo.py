@@ -7,7 +7,7 @@
 # Author: Dan van der Ster (daniel.vanderster@cern.ch)
 #
 
-import commands, json, string, sys
+import commands, json, string, sys, time
 
 def init_df():
   global df_data
@@ -140,6 +140,18 @@ def get_n_openstack_volumes():
 def get_n_openstack_images():
   n = commands.getoutput('rbd ls -p images 2>/dev/null | wc -l')
   return int(n)
+
+def get_smooth_activity(n):
+  sum_iops = 0
+  sum_read = 0
+  sum_write = 0
+  for i in xrange(n):
+    sum_iops += stat_data['pgmap']['op_per_sec']
+    sum_read += stat_data['pgmap']['read_bytes_sec'] / 1024 / 1024
+    sum_write += stat_data['pgmap']['write_bytes_sec'] / 1024 / 1024
+    time.sleep(1)
+    init_stat()
+  return [int(sum_iops/n), int(sum_read/n), int(sum_write/n)]
 
 if __name__ == "__main__":
   # basic testing
