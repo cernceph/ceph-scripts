@@ -129,9 +129,17 @@ def get_n_mons():
 def get_n_mons_quorum():
   return len(mon_data['quorum'])
 
-def get_latency():
-  latency_ms = commands.getoutput('rados -p test bench 10 write -t 1 -b 65536 2>/dev/null | grep -i latency | awk \'{print 1000*$3}\'').split()
+def get_write_latency():
+  latency_ms = commands.getoutput('rados -p test bench 10 write -t 1 -b 4096 --no-cleanup 2>/dev/null | egrep -i \'latency|prefix\' | grep -vi stddev | awk \'{print $3}\'').split()
+  return latency_ms[0],[float(x) for x in latency_ms[1:]]
+
+def get_read_latency():
+  latency_ms = commands.getoutput('rados -p test bench 10 seq -t 1 2>/dev/null | grep -i latency | awk \'{print $3}\'').split()
   return [float(x) for x in latency_ms]
+
+def rados_cleanup(prefix):
+  assert(prefix)
+  commands.getoutput('rados -p test cleanup benchmark_data --prefix %s' % prefix)
 
 def get_n_openstack_volumes():
   n = commands.getoutput('rbd ls -p volumes 2>/dev/null | wc -l')
