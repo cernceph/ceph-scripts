@@ -33,7 +33,10 @@ def write_xml():
   osd_stats_sum = cephinfo.get_osd_stats_sum()
   pg_stats_sum = cephinfo.get_pg_stats_sum()['stat_sum']
   pg_map = cephinfo.stat_data['pgmap']
-  latency = cephinfo.get_latency()
+  latency = cephinfo.get_write_latency()
+  pg_states = cephinfo.get_pg_states()
+  read_latency = cephinfo.get_read_latency()
+  cephinfo.rados_cleanup(latency[0])
   activity = cephinfo.get_smooth_activity(10)
   context = {
     "timestamp"          : commands.getoutput('date +%Y-%m-%dT%H:%M:%S'),
@@ -45,7 +48,9 @@ def write_xml():
     "n_osds_up"          : osd_states['up'],
     "n_osds_in"          : osd_states['in'],
     "n_pgs"              : cephinfo.get_n_pgs(),
-    "n_pgs_active"       : cephinfo.get_pg_states()['active'],
+    "n_pgs_active"       : pg_states['active'],
+    "n_pgs_scrubbing"    : pg_states['scrubbing'],
+    "n_pgs_deep"         : pg_states['deep'],
     "n_osd_gb_total"     : osd_stats_sum['kb'] / 1024 / 1024,
     "n_osd_gb_used"      : osd_stats_sum['kb_used'] / 1024 / 1024,
     "n_osd_gb_avail"     : osd_stats_sum['kb_avail'] / 1024 / 1024,
@@ -56,9 +61,12 @@ def write_xml():
     "n_objects_unfound"  : pg_stats_sum['num_objects_unfound'],
     "n_read_gb"          : pg_stats_sum['num_read_kb'] / 1024 / 1024,
     "n_write_gb"         : pg_stats_sum['num_write_kb'] / 1024 / 1024,
-    "latency_ms"         : latency[0],
-    "latency_max_ms"     : latency[2],
-    "latency_min_ms"     : latency[3],
+    "latency_ms"         : latency[1][0]*1000,
+    "latency_max_ms"     : latency[1][1]*1000,
+    "latency_min_ms"     : latency[1][2]*1000,
+    "read_latency_ms"    : read_latency[0]*1000,
+    "read_latency_max_ms": read_latency[1]*1000,
+    "read_latency_min_ms": read_latency[2]*1000,
     "n_openstack_volumes": cephinfo.get_n_openstack_volumes(),
     "n_openstack_images" : cephinfo.get_n_openstack_images(),
     "op_per_sec"         : activity[0],
@@ -103,6 +111,8 @@ def write_xml():
                 <grp name="PGs">
 		    <numericvalue name="n_pgs" desc="Num PGs">{n_pgs}</numericvalue>
 		    <numericvalue name="n_pgs_active" desc="Num PGs Active">{n_pgs_active}</numericvalue>
+		    <numericvalue name="n_pgs_scrubbing" desc="Num PGs Scrubbing">{n_pgs_scrubbing}</numericvalue>
+		    <numericvalue name="n_pgs_deep" desc="Num PGs Deep Scrubbing">{n_pgs_deep}</numericvalue>
                 </grp>
                 <grp name="Disk Space">
 		    <numericvalue name="n_osd_gb_total" desc="OSD Gigabytes Total">{n_osd_gb_total}</numericvalue>
@@ -120,10 +130,15 @@ def write_xml():
 		    <numericvalue name="n_read_gb" desc="Total Read (GB)">{n_read_gb}</numericvalue>
 		    <numericvalue name="n_write_gb" desc="Total Write (GB)">{n_write_gb}</numericvalue>
                 </grp>
-                <grp name="64KB Write Latency (ms)">
+                <grp name="4KB Write Latency (ms)">
 		    <numericvalue name="latency_ms" desc="Average">{latency_ms}</numericvalue>
 		    <numericvalue name="latency_max_ms" desc="Max">{latency_max_ms}</numericvalue>
 		    <numericvalue name="latency_min_ms" desc="Min">{latency_min_ms}</numericvalue>
+                </grp>
+                <grp name="4KB Read Latency (ms)">
+		    <numericvalue name="read_latency_ms" desc="Average">{read_latency_ms}</numericvalue>
+		    <numericvalue name="read_latency_max_ms" desc="Max">{read_latency_max_ms}</numericvalue>
+		    <numericvalue name="read_latency_min_ms" desc="Min">{read_latency_min_ms}</numericvalue>
                 </grp>
                 <grp name="OpenStack">
 		    <numericvalue name="n_openstack_volumes" desc="Num OpenStack Volumes">{n_openstack_volumes}</numericvalue>
