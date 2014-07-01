@@ -1,0 +1,18 @@
+#!/bin/bash
+
+while true
+do
+
+  #while ceph status | grep -q scrubbing+deep
+  while [ $(ceph pg dump 2>/dev/null | grep deep | wc -l) -gt 3 ]
+  do
+    echo 2 scrubbing, sleep 30s
+    sleep 30
+  done
+
+  ceph pg dump 2>/dev/null | egrep '^0\.|^4\.|^5\.' | grep -v scrubbing+deep | awk '$1 ~ /[0-9a-f]+\.[0-9a-f]+/ {print $20, $21, $1}' | sort | head -2 | { while read date time pg; do echo $pg last scrubbed $date $time; ceph pg deep-scrub $pg; done; }
+  ceph pg dump 2>/dev/null | egrep -v '^0\.|^4\.|^5\.' | grep -v scrubbing+deep | awk '$1 ~ /[0-9a-f]+\.[0-9a-f]+/ {print $20, $21, $1}' | sort | head -2 | { while read date time pg; do echo $pg last scrubbed $date $time; ceph pg deep-scrub $pg; done; }
+  sleep 30
+
+done 
+
