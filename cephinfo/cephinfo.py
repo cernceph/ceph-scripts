@@ -39,6 +39,11 @@ def init_stat():
   stat_json = commands.getoutput('ceph -s -f json 2>/dev/null')
   stat_data = json.loads(stat_json)
 
+def init_crush():
+  global crush_data
+  crush_json = commands.getoutput('ceph osd tree -f json 2>/dev/null')
+  crush_data = json.loads(crush_json)
+
 def get_json():
   init_mon()
   init_osd()
@@ -153,13 +158,19 @@ def get_smooth_activity(n):
   sum_iops = 0
   sum_read = 0
   sum_write = 0
+  count = 0
   for i in xrange(n):
-    sum_iops += stat_data['pgmap']['op_per_sec']
-    sum_read += stat_data['pgmap']['read_bytes_sec'] / 1024 / 1024
-    sum_write += stat_data['pgmap']['write_bytes_sec'] / 1024 / 1024
+    try:
+      sum_iops += stat_data['pgmap']['op_per_sec']
+      sum_read += stat_data['pgmap']['read_bytes_sec'] / 1024 / 1024
+      sum_write += stat_data['pgmap']['write_bytes_sec'] / 1024 / 1024
+      count += 1
+    except KeyError:
+      pass
     time.sleep(1)
     init_stat()
-  return [int(sum_iops/n), int(sum_read/n), int(sum_write/n)]
+  
+  return [int(sum_iops/count), int(sum_read/count), int(sum_write/count)]
 
 if __name__ == "__main__":
   # basic testing
