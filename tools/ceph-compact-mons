@@ -1,0 +1,44 @@
+#!/bin/bash
+# ceph-restart-mons
+#
+# restart all the mons in succession, sleeping between and checking their health
+
+delay=30
+
+# get mons in reverse order
+mons=$(ceph-conf -l mon. | sort -r) 
+
+doit=$1
+
+for mon in $mons
+do
+  for i in {1..3}
+  do
+    echo Compact $mon, attempt ${i}...
+
+    echo -n Checking ceph health...
+    ceph_health=$(ceph health)
+    if [ "$ceph_health" == 'HEALTH_OK' ]
+    then
+      echo $ceph_health, going to compact
+      if [ "$doit" == '--doit' ]
+      then
+        ceph tell $mon compact
+      else
+        echo Would run \"ceph tell $mon compact\", enable with --doit
+      fi
+      echo Done, sleeping ${delay}s
+      sleep $delay
+      echo
+      break
+    else
+      echo Not healthy
+      echo $ceph_health
+      echo sleeping ${delay}s
+      sleep $delay
+      echo
+    fi
+  done
+done
+
+
