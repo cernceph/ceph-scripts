@@ -170,8 +170,10 @@ def get_smooth_activity(n):
       pass
     time.sleep(1)
     init_stat()
-  
-  return [int(sum_iops/count), int(sum_read/count), int(sum_write/count)]
+  try:
+    return [int(sum_iops/count), int(sum_read/count), int(sum_write/count)]
+  except ZeroDivisionError:
+    return [0, 0, 0]
 
 if __name__ == "__main__":
   # basic testing
