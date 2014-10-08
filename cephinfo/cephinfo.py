@@ -118,6 +118,7 @@ def get_pg_states():
     "wait_backfill" : 0,
     "recovery_wait" : 0,
     "backfill_toofull" : 0,
+    "incomplete" : 0,
   }
   for pg in get_pg_stats():
     state = pg["state"]
