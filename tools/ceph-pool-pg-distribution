@@ -10,18 +10,19 @@ if len(sys.argv) > 1:
   if pool == 'all':
     all = True
   else:
-    pool = int(sys.argv[1])
+    pools = pool.split(',')
 else:
-  print "Usage: ceph-pool-pg-distribution <pool number>"
+  print "Usage: ceph-pool-pg-distribution <pool number>[,<pool num>]"
   sys.exit(1)
 
+print "Searching for PGs in pools: %s" % pools
 cephinfo.init_pg()
-
 osds_d = defaultdict(int)
 total_pgs = 0
 
 for pg in cephinfo.get_pg_stats():
-  if not all and not pg['pgid'].startswith('%d.' % pool):
+  poolnum = pg['pgid'].split('.')[0]
+  if not all and poolnum not in pools:
     continue
   total_pgs += 1
   for osd in pg['acting']:
