@@ -1,0 +1,133 @@
+#!/usr/bin/python
+#
+# ceph-gentle-drain
+# Author: Dan van der Ster <daniel.vanderster@cern.ch>
+#
+# Slowly drain a list of OSDs causing minimal impact in a ceph cluster.
+#
+
+import sys, getopt, commands, json, time
+
+def update_osd_tree():
+  global osd_tree
+  print "update_osd_tree: loading ceph osd tree"
+  osd_tree_json = commands.getoutput('ceph osd tree --format=json 2>/dev/null')
+  osd_tree = json.loads(osd_tree_json) 
+  print "update_osd_tree: done"
+
+def get_crush_weight(osd):
+  global osd_tree
+  for node in osd_tree['nodes']:
+    if node['name'] == osd:
+      weight = float(node['crush_weight'])
+      print "get_crush_weight: %s has weight %s" % (osd, weight)
+      return weight
+  raise Exception('Undefined crush_weight for %s' % osd)
+
+def measure_latency():
+  print "measure_latency: measuring 4kB write latency"
+  latency = commands.getoutput("rados -p test bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'")
+  latency_ms = 1000*float(latency) 
+  print "measure_latency: current latency is %s" % latency_ms
+  return latency_ms
+
+def get_num_backfilling():
+  cmd = "ceph health detail | grep pg | grep -v stuck | grep backfilling | wc -l"
+  out = commands.getoutput(cmd)
+  n = int(out)
+  print "get_num_backfilling: PGs currently backfilling: %s" % n
+  return n
+
+def crush_reweight(osd, weight):
+  cmd = "ceph osd crush reweight %s %s" % (osd, weight)
+  print "crush_reweight: calling %s" % cmd
+  out = commands.getoutput(cmd)
+  print "crush_reweight: %s" % out
+
+def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight):
+
+  # check if there is any work to do:
+  update_osd_tree()
+  total_weight = 0
+  for osd in osds:
+    total_weight += get_crush_weight(osd)
+
+  if total_weight == 0:
+    print "drain: no work to do, exiting"
+    sys.exit(0)
+
+  print "drain: draining total weight %s" % total_weight
+
+  # check num pgs backfilling
+  npgs = get_num_backfilling()
+  if npgs > max_pgs_backfilling:
+    print "drain: npgs backfilling is too high, trying again later"
+    return
+
+  # check the latency
+  latency = measure_latency()
+  if latency > max_latency:
+    print "drain: latency is too high, trying again later"
+    return
+
+  total_delta_weight = 0
+
+  for osd in osds:
+    if total_delta_weight > max_delta_weight:
+      print "drain: reached max delta weight this round: %s" % total_delta_weight
+      return
+
+    weight = get_crush_weight(osd)
+    if weight <= 0:
+      print "drain: skipping %s with weight %s" % (osd, weight)
+      continue
+    
+    new_weight = 0
+    print "drain: %s new weight will be %s" % (osd, new_weight)
+    crush_reweight(osd, new_weight)
+    total_delta_weight += weight
+
+  if total_delta_weight == 0:
+    print "All done"
+    sys.exit(0)
+
+def usage(code=0):
+  print 'ceph-gentle-drain -o <osd>[,<osd>,...] [-l <max_latency (default=50)>] [-b <max pgs backfilling (default=20)>] [-w <max incremental weight (default=2)>]'
+  sys.exit(code)
+
+def main(argv):
+  drain_osds = []
+  max_latency = 50
+  max_pgs_backfilling = 20
+  max_delta_weight = 2
+
+  try:
+    opts, args = getopt.getopt(argv,"ho:l:b:w:",["osds=","latency=","backfills=","weight="])
+  except getopt.GetoptError:
+    usage(2)
+  for opt, arg in opts:
+    if opt == '-h':
+      usage()
+    elif opt in ("-o", "--osds"):
+      drain_osds = arg.split(',')
+    elif opt in ("-l", "--latency"):
+      max_latency = int(arg)
+    elif opt in ("-b", "--backfills"):
+      max_pgs_backfilling = int(arg)
+    elif opt in ("-w", "--weight"):
+      max_delta_weight = float(arg)
+  if not drain_osds:
+    usage(2)
+ 
+  print 'Draining OSDs: ', drain_osds
+  print 'Max latency (ms): ', max_latency
+  print 'Max PGs backfilling: ', max_pgs_backfilling
+  print 'Max delta weight:', max_delta_weight
+
+  while(True):
+    drain(drain_osds, max_pgs_backfilling, max_latency, max_delta_weight)
+    print "main: sleeping 60s"
+    time.sleep(60)
+
+if __name__ == "__main__":
+  main(sys.argv[1:])

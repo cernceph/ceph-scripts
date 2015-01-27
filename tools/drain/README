@@ -1,0 +1,37 @@
+
+tmux HOWTO
+----------
+
+ceph-gentle-drain is running in a tmux session (tmux is like screen).
+
+tmux list-sessions
+tmux attach
+
+(to detach while in tmux: ctrl-b d)
+
+Which OSDs to drain??
+---------------------
+
+> ceph osd tree | grep host
+
+get a host with 65.52 crush weight
+
+-32	54.6				host p05151113578124
+-33	54.6				host p05151113568206
+-35	54.6				host p05151113578807
+-41	65.52				host p05151113585107
+-47	65.52				host p05151113590997
+-38	65.52				host p05151113599377
+
+
+
+> ssh p05151113585107 "facter -p ceph_osd_id_sda1 ceph_osd_id_sdb1 ceph_osd_id_sdc1 ceph_osd_id_sdd1" | awk '{print "osd." $3}' | tr '\n' ',' | sed 's/,$//'
+osd.763,osd.717,osd.739,osd.740
+
+How to drain the OSDs?
+----------------------
+
+ceph-gentle-drain -o <osd>[,<osd>..] -l <max_latency> -b <max pgs backfilling>
+e.g.
+
+./ceph-gentle-drain -o osd.332,osd.318,osd.562,osd.334,osd.763,osd.717,osd.739,osd.740,osd.561,osd.576,osd.557,osd.319 -l 50 -b 30
