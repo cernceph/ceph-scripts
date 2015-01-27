@@ -1,0 +1,165 @@
+#!/usr/bin/python
+#
+# ceph-gentle-split
+# Author: Dan van der Ster <daniel.vanderster@cern.ch>
+#
+# Slowly split a pool causing minimal impact in a ceph cluster.
+#
+
+import sys, getopt, commands, json, time
+
+def update_osd_dump():
+  global osd_dump
+  print "update_osd_dump: loading ceph osd dump"
+  (status, osd_dump_json) = commands.getstatusoutput('ceph osd dump --format=json 2>/dev/null')
+  if status:
+    print "Error: %s", osd_dump_json
+    sys.exit(1)
+  
+  osd_dump = json.loads(osd_dump_json) 
+  print "update_osd_dump: done"
+
+def get_pg_num(pool_name):
+  global osd_dump
+
+  for pool in osd_dump['pools']:
+    if pool['pool_name'] == pool_name:
+      pg_num = int(pool['pg_num'])
+      print "get_pg_num: %s has pg_num %s" % (pool_name, pg_num)
+      return pg_num
+  raise Exception('Undefined pg_num for %s' % pool_name)
+
+def get_pgp_num(pool_name):
+  global osd_dump
+
+  for pool in osd_dump['pools']:
+    if pool['pool_name'] == pool_name:
+      pgp_num = int(pool['pg_placement_num'])
+      print "get_pgp_num: %s has pgp_num %s" % (pool_name, pgp_num)
+      return pgp_num
+  raise Exception('Undefined pgp_num for %s' % pool_name)
+
+def measure_latency():
+  print "measure_latency: measuring 4kB write latency"
+  latency = commands.getoutput("rados -p test.os bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'")
+  latency_ms = 1000*float(latency) 
+  print "measure_latency: current latency is %s" % latency_ms
+  return latency_ms
+
+def get_num_backfilling():
+  cmd = "ceph health detail | grep pg | grep -v stuck | grep backfilling | wc -l"
+  out = commands.getoutput(cmd)
+  n = int(out)
+  print "get_num_backfilling: PGs currently backfilling: %s" % n
+  return n
+
+def get_num_creating():
+  cmd = "ceph health detail | grep pg | grep -v stuck | grep creating | wc -l"
+  out = commands.getoutput(cmd)
+  n = int(out)
+  print "get_num_creating: PGs currently creating: %s" % n
+  return n
+
+def split_pool(pool, pg_num):
+  cmd = "ceph osd pool set %s pg_num %s" % (pool, pg_num)
+  print "split_pool: calling %s" % cmd
+  (status, out) = commands.getstatusoutput(cmd)
+  if status:
+    print "Error: %s", osd_dump_json
+    sys.exit(1)
+
+  print "split_pool: %s" % out
+  time.sleep(5)
+
+  cmd = "ceph osd pool set %s pgp_num %s" % (pool, pg_num)
+  status = 1
+  while status != 0:
+    print "split_pool: calling %s" % cmd
+    (status, out) = commands.getstatusoutput(cmd)
+    print "split_pool: %s" % out
+    time.sleep(2)
+
+def split(pool, goal, max_pgs_backfilling, max_latency, max_step):
+
+  # check if there is any work to do:
+  update_osd_dump()
+  current_pg_num = get_pg_num(pool)
+  current_pgp_num = get_pgp_num(pool)
+
+  if current_pg_num != current_pgp_num:
+    print "split: pg_num != pgp_num. fix that then start again"
+    sys.exit(1)
+
+  if current_pg_num >= goal:
+    print "split: no work to do, exiting"
+    sys.exit(0)
+
+  print "split: splitting from %s to %s" % (current_pg_num, goal)
+
+  if max_pgs_backfilling > 0:
+    # check num pgs backfilling
+    npgs = get_num_backfilling()
+    if npgs > max_pgs_backfilling:
+      print "split: npgs backfilling is too high, trying again later"
+      return
+
+  if max_latency > 0:
+    # check the latency
+    latency = measure_latency()
+    if latency > max_latency:
+      print "split: latency is too high, trying again later"
+      return
+
+  new_pg_num = min(goal, current_pg_num + max_step)
+  print "split: %s new pg_num will be %s" % (pool, new_pg_num)
+  split_pool(pool, new_pg_num)
+
+  if new_pg_num == goal:
+    print "All done"
+    sys.exit(0)
+
+def usage(code=0):
+  print 'ceph-gentle-split -p <pool> -g <goal num pgs> [-l <max_latency (default=50)>] [-b <max pgs backfilling (default=20)>] [-w <max step (default=10)>]'
+  sys.exit(code)
+
+def main(argv):
+  pool = ''
+  max_latency = 50
+  max_pgs_backfilling = 20
+  max_step = 10
+  goal = 0
+  
+
+  try:
+    opts, args = getopt.getopt(argv,"hp:l:b:s:g:",["pool=","latency=","backfills=","step=","goal="])
+  except getopt.GetoptError:
+    usage(2)
+  for opt, arg in opts:
+    if opt == '-h':
+      usage()
+    elif opt in ("-p", "--pool"):
+      pool = arg
+    elif opt in ("-l", "--latency"):
+      max_latency = int(arg)
+    elif opt in ("-b", "--backfills"):
+      max_pgs_backfilling = int(arg)
+    elif opt in ("-s", "--step"):
+      max_step = int(arg)
+    elif opt in ("-g", "--goal"):
+      goal = int(arg)
+  if not pool or goal < 1:
+    usage(2)
+ 
+  print 'Pool: ', pool
+  print 'Goal: ', goal
+  print 'Max latency (ms): ', max_latency
+  print 'Max PGs backfilling: ', max_pgs_backfilling
+  print 'Max step:', max_step
+
+  while(True):
+    split(pool, goal, max_pgs_backfilling, max_latency, max_step)
+    print "main: sleeping 60s"
+    time.sleep(60)
+
+if __name__ == "__main__":
+  main(sys.argv[1:])
