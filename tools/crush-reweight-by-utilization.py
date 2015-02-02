@@ -5,8 +5,8 @@ from optparse import OptionParser
 from collections import defaultdict
 import commands
 
-def get_weight(osd):
-  return osd_weights[osd]['reweight']
+def get_weight(osd, type='reweight'):
+  return osd_weights[osd][type]
 
 def change_weight(osd, new_weight, really):
   cmd = "ceph osd reweight %d %5f" % (osd, new_weight)
@@ -41,7 +41,7 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really):
       for a in p['acting']:
         if not pgs_by_osd[a]:
           num_osds += 1
-          weight_sum += get_weight(a)
+          weight_sum += get_weight(a,'crush_weight')
           pgs_by_osd[a] = 0
         pgs_by_osd[a] += 1
         num_pg_copies += 1
@@ -67,16 +67,16 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really):
   # adjust down only if we are above the threshold
   overload_util = average_util * oload / 100.0
 
-  # but aggressively adjust weights up whenever possible
-  underload_util = average_util
+  # adjust weights up whenever possible
+  underload_util = average_util # - (overload_util - average_util)
 
-  print "average_util: %04f, overload_util: %04f. " %(average_util, overload_util)
+  print "average_util: %04f, overload_util: %04f, underload_util: %04f. " %(average_util, overload_util, underload_util)
 
   print "reweighted: "
 
   for osd in pgm['osd_stats']:
     if by_pg:
-      util = pgs_by_osd[osd['osd']] / get_weight(osd['osd'])
+      util = pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')
     else:
       util = float(osd['kb_used']) / float(osd['kb'])
 
@@ -90,7 +90,7 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really):
       # to represent e.g. differing storage capacities
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
-      print "%d [%04f -> %04f]" % (osd['osd'], weight, new_weight)
+      print "%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
       if doit: change_weight(osd['osd'], new_weight, really)
     if util <= underload_util:
       # assign a higher weight.. if we can
@@ -99,7 +99,7 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really):
       if new_weight > 1.0:
         new_weight = 1.0
       if new_weight > weight:
-        print "%d [%04f -> %04f]" % (osd['osd'], weight, new_weight)
+        print "%d (%4f <= %4f) [%04f -> %04f]" % (osd['osd'], util, underload_util, weight, new_weight)
         if doit: change_weight(osd['osd'], new_weight, really)
 
 def get_weights():
