@@ -18,7 +18,7 @@ def change_weight(osd, new_weight, really):
   else:
     print "add --really to run the above command"
 
-def reweight_by_utilization(oload, by_pg, pools, doit, really):
+def reweight_by_utilization(oload, by_pg, pools, doit, really, adjust_up):
   if oload <= 100:
     raise Exception("You must give a percentage higher than 100.")
 #      "The reweighting threshold will be calculated as <average-utilization> "
@@ -92,7 +92,7 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really):
       new_weight = (average_util / util) * float(weight)
       print "%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
       if doit: change_weight(osd['osd'], new_weight, really)
-    if util <= underload_util:
+    if adjust_up and util <= underload_util:
       # assign a higher weight.. if we can
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
@@ -130,6 +130,8 @@ if __name__ == "__main__":
                   help="Do it!")
   parser.add_option("-r", "--really", dest="really", action="store_true",
                   help="Really really do it! This will change your crush map.")
+  parser.add_option("-u", "--adjust-up", dest="adjust_up", action="store_true",
+                  help="Also adjust weights up if OSDs are below ideal weight")
   (options, args) = parser.parse_args()
   get_weights()
-  reweight_by_utilization(options.oload, options.by_pg, options.pools, options.doit, options.really)
+  reweight_by_utilization(options.oload, options.by_pg, options.pools, options.doit, options.really, options.adjust_up)
