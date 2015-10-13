@@ -18,8 +18,8 @@ def change_weight(osd, new_weight, really):
   else:
     print "add --really to run the above command"
 
-def reweight_by_utilization(oload, by_pg, pools, doit, really, adjust_up):
-  if oload <= 100:
+def reweight_by_utilization(options):
+  if options.oload <= 100:
     raise Exception("You must give a percentage higher than 100.")
 #      "The reweighting threshold will be calculated as <average-utilization> "
 #      "times <input-percentage>. For example, an argument of 200 would "
@@ -30,15 +30,15 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really, adjust_up):
 
   pgs_by_osd = defaultdict(int)
 
-  if by_pg:
+  if options.by_pg:
     weight_sum = 0.0
     num_pg_copies = 0
     num_osds = 0
     for p in pgm['pg_stats']:
       pool = p['pgid'].split('.')[0]
-      if pools and pool not in pools:
+      if options.pools and pool not in options.pools:
          continue
-      for a in p['acting']:
+      for a in p['up']:
         if not pgs_by_osd[a]:
           num_osds += 1
           weight_sum += get_weight(a,'crush_weight')
@@ -65,17 +65,23 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really, adjust_up):
     average_util = float(pgm['osd_stats_sum']['kb_used']) / float(pgm['osd_stats_sum']['kb'])
 
   # adjust down only if we are above the threshold
-  overload_util = average_util * oload / 100.0
+  overload_util = average_util * options.oload / 100.0
 
   # adjust weights up whenever possible
-  underload_util = average_util # - (overload_util - average_util)
+  underload_util = average_util - (overload_util - average_util)
 
   print "average_util: %04f, overload_util: %04f, underload_util: %04f. " %(average_util, overload_util, underload_util)
 
   print "reweighted: "
 
-  for osd in pgm['osd_stats']:
-    if by_pg:
+  n = 0
+  if options.by_pg:
+    osds = sorted(pgm['osd_stats'], key=lambda osd: -abs(average_util - pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')))
+  else:
+    osds = sorted(pgm['osd_stats'], key=lambda osd: -abs(average_util - float(osd['kb_used']) / float(osd['kb'])))
+  
+  for osd in osds:
+    if options.by_pg:
       util = pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')
     else:
       util = float(osd['kb_used']) / float(osd['kb'])
@@ -90,17 +96,25 @@ def reweight_by_utilization(oload, by_pg, pools, doit, really, adjust_up):
       # to represent e.g. differing storage capacities
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
+      if weight - new_weight > options.max_change:
+        new_weight = weight - options.max_change
       print "%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
-      if doit: change_weight(osd['osd'], new_weight, really)
-    if adjust_up and util <= underload_util:
+      if options.doit: change_weight(osd['osd'], new_weight, options.really)
+      n += 1
+      if n >= options.num_osds: break
+    if options.adjust_up and util <= underload_util:
       # assign a higher weight.. if we can
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
+      if new_weight - weight > options.max_change:
+        new_weight = weight + options.max_change
       if new_weight > 1.0:
         new_weight = 1.0
       if new_weight > weight:
         print "%d (%4f <= %4f) [%04f -> %04f]" % (osd['osd'], util, underload_util, weight, new_weight)
-        if doit: change_weight(osd['osd'], new_weight, really)
+        if options.doit: change_weight(osd['osd'], new_weight, options.really)
+        n += 1
+        if n >= options.num_osds: break
 
 def get_weights():
   cephinfo.init_crush()
@@ -122,16 +136,20 @@ if __name__ == "__main__":
   parser = OptionParser()
   parser.add_option("-o", "--overload", dest="oload", type="float", default=120.0,
                   help="The overload threshold percentage, default 120%")
-  parser.add_option("-b", "--by_pg", dest="by_pg", action="store_true",
+  parser.add_option("-b", "--by-pg", dest="by_pg", action="store_true",
                   help="Reweight by num PGs instead of utilization")
   parser.add_option("-p", "--pool", dest="pools", action="append",
                   help="Only work on these pools.")
+  parser.add_option("-u", "--adjust-up", dest="adjust_up", action="store_true",
+                  help="Also adjust weights up if OSDs are below ideal weight")
+  parser.add_option("-m", "--max-change", dest="max_change", type="float", default=0.05,
+                  help="Maximum weight change to each OSD (default 0.1)")
+  parser.add_option("-n", "--num-osds", dest="num_osds", type="int", default=4,
+                  help="Number of OSDs to change (default 4)")
   parser.add_option("-d", "--doit", dest="doit", action="store_true",
                   help="Do it!")
   parser.add_option("-r", "--really", dest="really", action="store_true",
                   help="Really really do it! This will change your crush map.")
-  parser.add_option("-u", "--adjust-up", dest="adjust_up", action="store_true",
-                  help="Also adjust weights up if OSDs are below ideal weight")
   (options, args) = parser.parse_args()
   get_weights()
-  reweight_by_utilization(options.oload, options.by_pg, options.pools, options.doit, options.really, options.adjust_up)
+  reweight_by_utilization(options)
