@@ -18,4 +18,4 @@ for pool in cephinfo.df_data['pools']:
   t_objects += pool['stats']['objects']
   t_bytes_used += pool['stats']['bytes_used']
 
-print date.today().strftime("%d/%m/%Y"), 'totalbytes', cephinfo.df_data['stats']['total_space']*1024, 'totalbytesused', t_bytes_used, 'totalobjects', t_objects
+print date.today().strftime("%d/%m/%Y"), 'totalbytes', cephinfo.df_data['stats']['total_bytes'], 'totalbytesused', t_bytes_used, 'totalobjects', t_objects
