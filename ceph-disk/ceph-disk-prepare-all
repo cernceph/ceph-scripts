@@ -1,0 +1,258 @@
+#!/usr/bin/env python
+
+import commands
+import json
+import sys
+import re
+import math
+import os
+import stat
+import argparse
+
+# How this works:
+# 1. Analyse the system and compute the ideal OSD/Journal layout
+# 2. Observe the current OSD/Journal layout
+# 3. Record the differences between (2) and (1) needed to prepare empty devices
+
+def devs_sorted(x):
+  """
+  sort devices so that sdb comes before sdaa
+  """
+  return sorted(x, key=lambda dev: (len(dev), dev))
+
+
+def ceph_disk_list():
+  # run ceph-disk list to discover ceph devices
+  status, output = commands.getstatusoutput('/root/ceph-disk list --format json')
+  if status != 0:
+    raise Error("Error running ceph-disk list")
+
+  # store for later
+  cephdisklist = json.loads(output)
+
+  return cephdisklist
+
+
+# copied from ceph-disk
+class Error(Exception):
+    """
+    Error
+    """
+
+    def __str__(self):
+        doc = self.__doc__.strip()
+        return ': '.join([doc] + [str(a) for a in self.args])
+
+
+# copied from ceph-disk
+def get_dev_name(path):
+    """
+    get device name from path.  e.g.::
+
+        /dev/sda -> sda, /dev/cciss/c0d1 -> cciss!c0d1
+
+    a device "name" is something like::
+
+        sdb
+        cciss!c0d1
+
+    """
+    assert path.startswith('/dev/')
+    base = path[5:]
+    return base.replace('/', '!')
+
+
+# copied from ceph-disk
+def get_partition_base(dev):
+    """
+    Get the base device for a partition
+    """
+    dev = os.path.realpath(dev)
+    if not stat.S_ISBLK(os.lstat(dev).st_mode):
+        raise Error('not a block device', dev)
+
+    name = get_dev_name(dev)
+    if os.path.exists(os.path.join('/sys/block', name)):
+        raise Error('not a partition', dev)
+
+    # find the base
+    for basename in os.listdir('/sys/block'):
+        if os.path.exists(os.path.join('/sys/block', basename, name)):
+            return '/dev/' + basename
+    raise Error('no parent device for partition', dev)
+
+
+def discover_devices(cephdisklist):
+  devices = commands.getoutput('ls /sys/block/').split()
+  ssds = commands.getoutput('grep 0 /sys/block/*/queue/rotational | cut -d/ -f4 | cut -d/ -f4').split()
+  disks = list(set(devices) - set(ssds))
+
+  assert(set(disks) & set(ssds) == set())
+  assert(set(devices) == set(disks) | set(ssds))
+
+  others = get_type_devices(cephdisklist, 'other')
+  disks = list(set(disks) - set(others))
+
+  return devs_sorted(disks), devs_sorted(ssds)
+
+
+def get_type_devices(cephdisklist, type):
+  devices = []
+  for disk in cephdisklist:
+    try:
+      path = get_dev_name(disk['path'])
+      if disk['type'] == type:
+        devices.append(path)
+    except KeyError:
+      partitions = disk['partitions']
+      for part in partitions:
+        if part['type'] == type and path not in devices:
+          devices.append(path)
+  return devices
+
+
+def get_reusable_journals(cephdisklist):
+  journals = []
+  for disk in cephdisklist:
+    try:
+      partitions = disk['partitions']
+    except KeyError:
+      continue # definitely not a journal
+    for part in partitions:
+      if part['type'] == 'journal' and 'journal_for' not in part:
+        journals.append(get_dev_name(part['path']))
+  return journals
+
+
+def choose_layout_mode(disks, ssds):
+  # three possible modes: ODJS, ODJD, OSJS
+  # ODJD and OSJS are logically equivalent
+  if len(ssds) == 0 and len(disks) > 0:
+    mode = 'colocated'
+  elif len(ssds) > 0 and len(ssds) < len(disks):
+    mode = 'ssd'
+  elif len(ssds) > 0:
+    mode = 'colocated'
+  else:
+    raise Error('Could not detect osd/journal mode')
+  return mode
+
+
+def validate_layout_mode(mode, disks, ssds):
+  if mode == 'ssd' and len(ssds) == 0:
+    raise Error('Cannot use SSD journals on a machine without SSDs!')
+
+
+def compute_ideal_layout(mode, disks, ssds):
+  if mode == 'colocated':
+    all = devs_sorted(list(set(disks) | set(ssds)))
+    return compute_colocated_layout(all)
+  elif mode == 'ssd':
+    return compute_ssd_layout(disks, ssds)
+  else:
+    raise Error('Unknown layout mode %s' % mode)
+
+
+def compute_colocated_layout(devices):
+  layout = []
+  for dev in devices:
+    layout.append((dev,''),)
+  return layout
+
+
+def compute_ssd_layout(osd_devs, journal_devs):
+  layout = []
+
+  n_journals_per_dev = int(math.ceil(len(osd_devs)/float(len(journal_devs))))
+
+  for partition in range(1, n_journals_per_dev + 1):
+    for journal in journal_devs:
+      try:
+        layout.append((osd_devs.pop(0), journal))
+      except IndexError:
+        break
+
+  return layout
+
+
+def detect_current_layout(cephdisklist):
+  layout = []
+  for disk in cephdisklist:
+    path = get_dev_name(disk['path'])
+    try:
+      for part in disk['partitions']:
+        if part['type'] == 'data':
+          journal_dev = get_dev_name(part['journal_dev'])
+          if path == get_partition_base('/dev/'+journal_dev):
+            journal_dev = ''
+          layout.append((path, journal_dev),)
+    except KeyError:
+      pass # probably not an osd
+
+  return layout
+
+
+def compute_work(ideal, present, reusable_journals):
+  work = []
+
+  prepared_osds = [ p[0] for p in present ]
+
+  for osd, journal in ideal:
+    if osd not in prepared_osds:
+      if journal == '':
+        work.append('ceph-disk prepare /dev/%s' % osd)
+      elif reusable_journals:
+        work.append('ceph-disk prepare /dev/%s /dev/%s' % (osd, reusable_journals.pop(0)))
+      else:
+        work.append('ceph-disk prepare /dev/%s /dev/%s' % (osd, journal))
+
+  return work
+
+
+###### MAIN ######
+
+parser = argparse.ArgumentParser(description='Discover ceph OSDs which have not yet been prepared and prepare them.')
+parser.add_argument('--journal-mode', dest='mode', default='autodiscover',
+                    choices=['autodiscover', 'colocated', 'ssd'],
+                    help='Set the OSD/Journal layout mode (default: %(default)s)')
+parser.add_argument('--format', dest='format', default='json',
+                    choices=['json','commands'],
+                    help='Set the output format (default: %(default)s)')
+
+args = parser.parse_args()
+
+### ANALYSE THE SYSTEM DEVICES ###
+cephdisklist = ceph_disk_list()
+disks, ssds = discover_devices(cephdisklist)
+
+### COMPUTE IDEAL LAYOUT ###
+mode = args.mode
+if mode == 'autodiscover':
+  mode = choose_layout_mode(disks, ssds)
+else:
+  validate_layout_mode(mode, disks, ssds)
+
+ideal_layout = compute_ideal_layout(mode, disks, ssds)
+
+### DETECT THE CURRENT LAYOUT ###
+current_layout = detect_current_layout(cephdisklist)
+reusable_journals = get_reusable_journals(cephdisklist)
+
+### COMPUTE THE WORK TO PREPARE OSDS ###
+prepare_work = compute_work(ideal_layout, current_layout, reusable_journals)
+
+### PRINT THE OUTPUT ###
+output = {
+  'ceph_ideal_layout': ideal_layout,
+  'ceph_current_layout': current_layout,
+  'ceph_prepare_work': prepare_work,
+}
+if args.format == 'json':
+  print json.dumps(output)
+elif args.format == 'commands':
+  for work in prepare_work:
+    print work
+else:
+  raise Error('Unknown output format %(args.format)')
+
+sys.exit()
