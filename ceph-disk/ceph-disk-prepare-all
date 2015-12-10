@@ -23,7 +23,7 @@ def devs_sorted(x):
 
 def ceph_disk_list():
   # run ceph-disk list to discover ceph devices
-  status, output = commands.getstatusoutput('/root/ceph-disk list --format json')
+  status, output = commands.getstatusoutput('ceph-disk list --format json')
   if status != 0:
     raise Error("Error running ceph-disk list")
 
