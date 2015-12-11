@@ -82,6 +82,16 @@ def get_partition_base(dev):
     raise Error('no parent device for partition', dev)
 
 
+def devs_sanitized(devices):
+  sanitized = []
+  for device in devices:
+    if device.startswith('ram') or device.startswith('loop') or device.startswith('md'):
+      continue
+    else:
+      sanitized.append(device)
+  return devs_sorted(sanitized)
+
+
 def discover_devices(cephdisklist):
   devices = commands.getoutput('ls /sys/block/').split()
   ssds = commands.getoutput('grep 0 /sys/block/*/queue/rotational | cut -d/ -f4 | cut -d/ -f4').split()
@@ -98,7 +108,7 @@ def discover_devices(cephdisklist):
   empty_ssds = list(set(empty) & set(ssds))
   empty_disks = list(set(empty) - set(empty_ssds))
 
-  return devs_sorted(disks), devs_sorted(ssds), devs_sorted(empty_disks), devs_sorted(empty_ssds)
+  return devs_sanitized(disks), devs_sanitized(ssds), devs_sanitized(empty_disks), devs_sanitized(empty_ssds)
 
 
 def get_empty_devices(cephdisklist):
