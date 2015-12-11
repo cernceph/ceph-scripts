@@ -208,14 +208,18 @@ def detect_current_layout(cephdisklist):
   for disk in cephdisklist:
     path = get_dev_name(disk['path'])
     try:
-      for part in disk['partitions']:
-        if part['type'] == 'data':
+      partitions = disk['partitions']
+    except KeyError:
+      continue # probably not an osd
+    for part in partitions:
+      if part['type'] == 'data':
+        try:
           journal_dev = get_dev_name(part['journal_dev'])
           if path == get_partition_base('/dev/'+journal_dev):
             journal_dev = ''
-          layout.append((path, journal_dev),)
-    except KeyError:
-      pass # probably not an osd
+        except KeyError: # usually a local journal file
+          journal_dev = ''
+        layout.append((path, journal_dev),)
 
   return layout
 
