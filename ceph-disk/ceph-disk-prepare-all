@@ -247,7 +247,7 @@ parser = argparse.ArgumentParser(description='Discover ceph OSDs which have not 
 parser.add_argument('--journal-mode', dest='mode', default='autodiscover',
                     choices=['autodiscover', 'colocated', 'ssd'],
                     help='Set the OSD/Journal layout mode (default: %(default)s)')
-parser.add_argument('--format', dest='format', default='json',
+parser.add_argument('--format', dest='format', default='commands',
                     choices=['json','commands'],
                     help='Set the output format (default: %(default)s)')
 
