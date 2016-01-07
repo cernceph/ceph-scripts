@@ -17,6 +17,7 @@ while(True):
 
   # Which PGs are scrubbing?
   pgs_scrubbing = [ pg for pg in pg_stats if 'scrubbing' in pg['state'] ]
+  pgs_scrubbing.sort(key=lambda k: k['pgid'])
   print
   print "PGs Scrubbing:"
   for pg in pgs_scrubbing:
