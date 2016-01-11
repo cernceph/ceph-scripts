@@ -1,11 +1,21 @@
 #!/usr/bin/python
 
-import simplejson as json
+try: import simplejson as json
+except ImportError: import json
+
 import commands
 import time
+import argparse
 
-MAX_SCRUBS = 50
-SLEEP = 30
+parser = argparse.ArgumentParser(description='Discover ceph OSDs which have not yet been prepared and prepare them.')
+parser.add_argument('--max-scrubs', dest='MAX_SCRUBS', default=0,
+                    help='Maximum number of scrubs to trigger (default: %(default)s)')
+parser.add_argument('--sleep', dest='SLEEP', default=0,
+                    help='Sleep this many seconds then run again, looping forever. 0 disables looping. (default: %(default)s)')
+
+args = parser.parse_args()
+MAX_SCRUBS = args.MAX_SCRUBS
+SLEEP = args.SLEEP
 
 while(True):
 
@@ -59,40 +69,46 @@ while(True):
     for osd in pg['acting']:
       if osd in osds_scrubbing.keys():
         print '(blocked by OSD', osd, ')',
-    print 
+    print
 
 
   # Which PGs have not been deep scrubbed the longest?
   pg_stats.sort(key=lambda k: k['last_deep_scrub_stamp'])
   pgs_scrubbing_stale = [pg for pg in pg_stats if 'scrubbing' not in pg['state'] ][:100]
 
-  n_to_trigger = MAX_SCRUBS - n_scrubbing
-  if n_to_trigger > 0:
-    n_triggered = 0
-    print
-    print "Should trigger %d deep scrubs" % n_to_trigger
-    print
-    print "PGs least recently deep scrubbed:"
-    for pg in pgs_scrubbing_stale:
+  n_to_trigger = max(0, MAX_SCRUBS - n_scrubbing)
+
+  i = 0
+  n_triggered = 0
+  print
+  print "Should trigger %d deep scrubs" % n_to_trigger
+  print
+  print "PGs least recently deep scrubbed:"
+  for pg in pgs_scrubbing_stale:
+    i += 1
+    print '  ', pg['pgid'], 'last deep scrubbed', pg['last_deep_scrub_stamp'],
+    print 'last scrubbed', pg['last_scrub_stamp'],
+    blocked = False
+    for osd in pg['acting']:
+      if osd in osds_scrubbing.keys():
+        print '(blocked by OSD', osd, ')',
+        blocked = True
+    if not blocked and n_to_trigger > 0:
+      output = commands.getoutput('ceph pg deep-scrub %s' % pg['pgid'])
+      print output,
+      n_triggered += 1
       if n_triggered == n_to_trigger:
         break
-      print '  ', pg['pgid'], 'last deep scrubbed', pg['last_deep_scrub_stamp'], 
-      print 'last scrubbed', pg['last_scrub_stamp'],
-      blocked = False
-      for osd in pg['acting']:
-        if osd in osds_scrubbing.keys():
-          print '(blocked by OSD', osd, ')',
-          blocked = True
-      if not blocked:
-        output = commands.getoutput('ceph pg deep-scrub %s' % pg['pgid'])
-        print output,
-        n_triggered += 1
-      print
-  else:
     print
-    print 'Already', n_scrubbing, 'scrubs in progress.'
+    if n_to_trigger < 1 and i == 10:
+      break
 
-  print
-  print "Sleeping %d seconds..." % SLEEP
-  time.sleep(SLEEP)
-  print
+  if SLEEP:
+    print
+    print "Sleeping %d seconds..." % SLEEP
+    time.sleep(SLEEP)
+    print
+  else:
+    break
+
+
