@@ -8,9 +8,9 @@ import time
 import argparse
 
 parser = argparse.ArgumentParser(description='Discover ceph OSDs which have not yet been prepared and prepare them.')
-parser.add_argument('--max-scrubs', dest='MAX_SCRUBS', default=0,
+parser.add_argument('--max-scrubs', dest='MAX_SCRUBS', type=int, default=0,
                     help='Maximum number of scrubs to trigger (default: %(default)s)')
-parser.add_argument('--sleep', dest='SLEEP', default=0,
+parser.add_argument('--sleep', dest='SLEEP', type=int, default=0,
                     help='Sleep this many seconds then run again, looping forever. 0 disables looping. (default: %(default)s)')
 
 args = parser.parse_args()
