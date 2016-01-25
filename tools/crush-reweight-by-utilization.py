@@ -5,6 +5,10 @@ from optparse import OptionParser
 from collections import defaultdict
 import commands
 
+
+mon_reweight_min_bytes_per_osd = 100*1024*1024
+mon_reweight_min_pgs_per_osd = 10
+
 def get_weight(osd, type='reweight'):
   return osd_weights[osd][type]
 
@@ -38,25 +42,25 @@ def reweight_by_utilization(options):
       pool = p['pgid'].split('.')[0]
       if options.pools and pool not in options.pools:
          continue
-      for a in p['up']:
-        if not pgs_by_osd[a]:
+      for q in p['up']:
+        if not pgs_by_osd[q]:
+          pgs_by_osd[q] = 0
+          weight_sum += get_weight(q,'crush_weight')
           num_osds += 1
-          weight_sum += get_weight(a,'crush_weight')
-          pgs_by_osd[a] = 0
-        pgs_by_osd[a] += 1
+        pgs_by_osd[q] += 1
         num_pg_copies += 1
 
-    if not num_osds or (num_pg_copies / num_osds < 10):
+    if not num_osds or (num_pg_copies / num_osds < mon_reweight_min_pgs_per_osd):
       raise Exception('Refusing to reweight: we only have %d PGs across %d osds!' % (num_pg_copies, num_osds))
 
     average_util = num_pg_copies / weight_sum
     print "weight_sum: %3f, num_pg_copies: %d, num_osds: %d" % (weight_sum, num_pg_copies, num_osds)
 
   else:
-
+    num_osd = len(pgm['osd_stats'])
     # Avoid putting a small number (or 0) in the denominator when calculating
     # average_util
-    if pgm['osd_stats_sum']['kb'] < 1024:
+    if pgm['osd_stats_sum']['kb'] * 1024 / num_osd < mon_reweight_min_bytes_per_osd:
       raise Exception("Refusing to reweight: we only have %d kB across all osds!" % pgm['osd_stats_sum']['kb'])
 
     if pgm['osd_stats_sum']['kb_used'] < 5 * 1024:
@@ -67,19 +71,23 @@ def reweight_by_utilization(options):
   # adjust down only if we are above the threshold
   overload_util = average_util * options.oload / 100.0
 
-  # adjust weights up whenever possible
-  underload_util = average_util - (overload_util - average_util)
+  # but aggressively adjust weights up whenever possible
+  underload_util = average_util # - (overload_util - average_util)
 
   print "average_util: %04f, overload_util: %04f, underload_util: %04f. " %(average_util, overload_util, underload_util)
 
   print "reweighted: "
 
-  n = 0
+  # sort to get heaviest osds first
+
+  nonempty_osds = [ osd for osd in pgm['osd_stats'] if float(osd['kb']) > 0 and get_weight(osd['osd'],type='crush_weight') > 0 ]
+
   if options.by_pg:
-    osds = sorted(pgm['osd_stats'], key=lambda osd: -abs(average_util - pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')))
+    osds = sorted(nonempty_osds, key=lambda osd: -abs(average_util - pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')))
   else:
-    osds = sorted(pgm['osd_stats'], key=lambda osd: -abs(average_util - float(osd['kb_used']) / float(osd['kb'])))
+    osds = sorted(nonempty_osds, key=lambda osd: -abs(average_util - float(osd['kb_used']) / float(osd['kb'])))
   
+  n = 0
   for osd in osds:
     if options.by_pg:
       util = pgs_by_osd[osd['osd']] / get_weight(osd['osd'],type='crush_weight')
@@ -96,8 +104,7 @@ def reweight_by_utilization(options):
       # to represent e.g. differing storage capacities
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
-      if weight - new_weight > options.max_change:
-        new_weight = weight - options.max_change
+      new_weight = max(new_weight, weight - options.max_change)
       print "%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
       if options.doit: change_weight(osd['osd'], new_weight, options.really)
       n += 1
@@ -106,8 +113,7 @@ def reweight_by_utilization(options):
       # assign a higher weight.. if we can
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
-      if new_weight - weight > options.max_change:
-        new_weight = weight + options.max_change
+      new_weight = min(new_weight, weight + options.max_change)
       if new_weight > 1.0:
         new_weight = 1.0
       if new_weight > weight:
