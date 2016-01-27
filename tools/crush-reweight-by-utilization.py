@@ -10,7 +10,10 @@ mon_reweight_min_bytes_per_osd = 100*1024*1024
 mon_reweight_min_pgs_per_osd = 10
 
 def get_weight(osd, type='reweight'):
-  return osd_weights[osd][type]
+  try:
+    return osd_weights[osd][type]
+  except KeyError:
+    return 0.0
 
 def change_weight(osd, new_weight, really):
   cmd = "ceph osd reweight %d %5f" % (osd, new_weight)
