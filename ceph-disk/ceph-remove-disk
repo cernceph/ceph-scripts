@@ -1,0 +1,68 @@
+#!/bin/bash
+
+DISK=$1
+
+if [ -z $DISK ]; then
+  echo Usage: $0 '<disk>'
+  echo
+  echo    Example to check /dev/sdk:
+  echo
+  echo    $0 /dev/sdk
+  echo
+  exit 1
+fi
+
+# Make sure that $DISK is a block device
+if [ ! -b $DISK ]; then
+  echo ERROR: ${DISK} is not a block device
+  exit 10
+fi
+
+if [ "$(ceph health)" != "HEALTH_OK" ]
+then
+  echo ERROR: Ceph is not healthy. Please try again in 1 hour.
+  exit 20
+fi
+
+# TODO: Check if SSD (Journal or HDD)
+
+###
+# Disk logic
+###
+
+# Check if mounted
+MOUNTPOINT=$(grep -E "^${DISK}[1-2]*\b" /proc/mounts | cut -d' ' -f2)
+if [ -z "${MOUNTPOINT}" ]; then
+  echo ERROR: Disk ${DISK} is not mounted.
+  exit 22
+fi
+
+# Find OSD ID
+OSD_ID=`echo ${MOUNTPOINT} | grep -oE '[0-9]+$'`
+if [ -z "${OSD_ID}" ]; then
+  echo ERROR: Unable to find Ceph OSD for ${DISK}
+  exit 30
+fi
+
+# Check if OSD is running
+PID=$(cat /var/run/ceph/osd.${OSD_ID}.pid)
+if [ -e /proc/${PID} ]; then
+  echo "ERROR: ceph-osd.${OSD_ID} is still running (PID: ${PID})"
+  exit 40
+fi
+
+# Check that OSD is down
+OSD_STATE=$(ceph osd dump | grep -E "osd.${OSD_ID}\s+" | awk '{print $2 " " $3}')
+if [ "${OSD_STATE}" != "down out" ]; then
+  echo "ERROR: Ceph osd.${OSD_ID} is not marked down+out in the cluster map"
+  exit 50
+fi
+
+# At this point it should be OK to remove the disk
+echo All good, going to unmount $DISK.
+echo umount ${MOUNTPOINT}
+echo rmdir ${MOUNTPOINT}
+
+echo Finished. It is now safe to physically remove $DISK.
+
+# exit all good.
