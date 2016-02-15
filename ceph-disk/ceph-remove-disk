@@ -45,8 +45,8 @@ if [ -z "${OSD_ID}" ]; then
 fi
 
 # Check if OSD is running
-PID=$(cat /var/run/ceph/osd.${OSD_ID}.pid)
-if [ -e /proc/${PID} ]; then
+PID=$(cat /var/run/ceph/osd.${OSD_ID}.pid 2>/dev/null)
+if [ ! -z "${PID}" ] && [ -e /proc/${PID} ]; then
   echo "ERROR: ceph-osd.${OSD_ID} is still running (PID: ${PID})"
   exit 40
 fi
