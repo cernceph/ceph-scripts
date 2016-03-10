@@ -22,7 +22,7 @@ def devs_sorted(x):
 
 
 def ceph_disk_list():
-  script_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+  script_dir = os.path.dirname(os.path.realpath(__file__))
   # run ceph-disk list to discover ceph devices
   status, output = commands.getstatusoutput('%s/ceph-disk list --format json' % script_dir)
   if status != 0:
