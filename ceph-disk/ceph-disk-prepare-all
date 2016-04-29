@@ -103,6 +103,7 @@ def discover_devices(cephdisklist):
 
   others = get_type_devices(cephdisklist, 'other')
   disks = list(set(disks) - set(others))
+  ssds = list(set(ssds) - set(others))
 
   empty = get_empty_devices(cephdisklist)
 
@@ -117,7 +118,7 @@ def get_empty_devices(cephdisklist):
   for disk in cephdisklist:
     path = get_dev_name(disk['path'])
     try:
-      if disk['type'] == 'other' and disk['ptype'] == 'unknown' and 'fs_type' not in disk and 'mount' not in disk:
+      if disk['type'] == 'other' and disk['ptype'] == 'unknown' and 'fs_type' not in disk and 'mount' not in disk and 'partitions' not in disk:
         devices.append(path)
     except KeyError:
         pass # not an empty disk
