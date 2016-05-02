@@ -101,14 +101,13 @@ def discover_devices(cephdisklist):
   assert(set(disks) & set(ssds) == set())
   assert(set(devices) == set(disks) | set(ssds))
 
+  empty = get_empty_devices(cephdisklist)
+  empty_ssds = list(set(empty) & set(ssds))
+  empty_disks = list(set(empty) - set(empty_ssds))
+
   others = get_type_devices(cephdisklist, 'other')
   disks = list(set(disks) - set(others))
   ssds = list(set(ssds) - set(others))
-
-  empty = get_empty_devices(cephdisklist)
-
-  empty_ssds = list(set(empty) & set(ssds))
-  empty_disks = list(set(empty) - set(empty_ssds))
 
   return devs_sanitized(disks), devs_sanitized(ssds), devs_sanitized(empty_disks), devs_sanitized(empty_ssds)
 
@@ -258,8 +257,9 @@ args = parser.parse_args()
 ### ANALYSE THE SYSTEM DEVICES ###
 cephdisklist = ceph_disk_list()
 disks, ssds, empty_disks, empty_ssds = discover_devices(cephdisklist)
-disks = list(set(disks) | set(empty_disks))
-ssds = list(set(ssds) | set(empty_ssds))
+disks = devs_sorted(list(set(disks) | set(empty_disks)))
+ssds = devs_sorted(list(set(ssds) | set(empty_ssds)))
+
 
 ### COMPUTE IDEAL LAYOUT ###
 mode = args.mode
@@ -282,6 +282,13 @@ output = {
   'ceph_ideal_layout': ideal_layout,
   'ceph_current_layout': current_layout,
   'ceph_prepare_work': prepare_work,
+  'ceph_disk_list': cephdisklist,
+  'disks': disks,
+  'empty_disks': empty_disks,
+  'ssds': ssds,
+  'empty_ssds': empty_ssds,
+  'mode': mode,
+  'reusable_journals': reusable_journals,
 }
 if args.format == 'json':
   print json.dumps(output)
