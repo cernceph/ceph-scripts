@@ -1,0 +1,10 @@
+ceph-deployifier
+
+Used to convert an "old" cernceph|enovance/puppet-ceph prepared OSD to one that 
+looks like it was prepared by ceph-deploy, i.e. ceph-disk.
+
+There are two tools: one to create new empty ceph journal partitions, and one to
+move/relink OSDs to these new journals.
+
+Be careful, there are many hardcoded dev names throughout. Adjust for your specific
+needs.
