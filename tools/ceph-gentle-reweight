@@ -69,7 +69,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
 
   for osd in osds:
     weight = get_crush_weight(osd)
-    if weight <= 0 or weight >= target_weight:
+    if weight <= 0 or weight >= (target_weight - delta_weight / 20):
       print "reweight_osds: skipping %s with weight %s target %s" % (osd, weight, target_weight)
       continue
     
