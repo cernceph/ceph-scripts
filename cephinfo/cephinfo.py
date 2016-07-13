@@ -119,13 +119,14 @@ def get_pg_states():
     "recovery_wait" : 0,
     "backfill_toofull" : 0,
     "incomplete" : 0,
+    "undersized" : 0,
+    "activating" : 0,
   }
   for pg in get_pg_stats():
-    state = pg["state"]
-    slist = string.split(state, "+")
+    slist = string.split(pg["state"], "+")
     for s in slist:
-      if not s in state_stats:
-        print >> sys.stderr, "PG %s has unknown state %s" % (pg["pgid"], s)
+      if s not in state_stats:
+        state_stats[s] = 1
       else:
         state_stats[s] += 1
   return state_stats
@@ -141,7 +142,7 @@ def get_write_latency():
   return latency_ms[0],[float(x) for x in latency_ms[1:]]
 
 def get_read_latency():
-  latency_ms = commands.getoutput('rados -p test bench 10 seq -t 1 2>/dev/null | grep -i latency | awk \'{print $3}\'').split()
+  latency_ms = commands.getoutput('rados -p test bench 10 rand -t 1 2>/dev/null | grep -i latency | awk \'{print $3}\'').split()
   return [float(x) for x in latency_ms]
 
 def rados_cleanup(prefix):
@@ -164,6 +165,12 @@ def get_smooth_activity(n):
   for i in xrange(n):
     try:
       sum_iops += stat_data['pgmap']['op_per_sec']
+    except KeyError:
+      try:
+        sum_iops += stat_data['pgmap']['read_op_per_sec'] + stat_data['pgmap']['write_op_per_sec']
+      except KeyError:
+        pass
+    try:
       sum_read += stat_data['pgmap']['read_bytes_sec'] / 1024 / 1024
       sum_write += stat_data['pgmap']['write_bytes_sec'] / 1024 / 1024
       count += 1
