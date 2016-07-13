@@ -21,8 +21,11 @@ def init_mon():
 
 def init_osd():
   global osd_data
+  global osd_df_data
   osd_json = commands.getoutput('ceph osd dump --format=json 2>/dev/null')
   osd_data = json.loads(osd_json)
+  osd_df_json = commands.getoutput('ceph osd df --format=json 2>/dev/null')
+  osd_df_data = json.loads(osd_df_json)
 
 def init_pg():
   global pg_data
