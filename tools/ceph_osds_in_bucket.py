@@ -1,11 +1,16 @@
 #!/usr/bin/env python
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
-""" Print a list of OSDs under a given CRUSH bucket/node.
+""" Print a list of nodes (of type osd/host/etc...) under a given CRUSH bucket/node.
 
 Example:
-    To see all nodes in the "default" bucket:
+    To see all osds in the "default" bucket:
 
         $ ceph_osds_in_bucket.py default
+
+    To see all hosts in rack RJ31:
+
+        $ ceph_osds_in_bucket.py --type host RJ31
+
 """
 
 import commands
@@ -23,22 +28,23 @@ def prepare(nodes):
         by_name[node['name']] = node
     return by_id, by_name
 
-def walk(node):
-    """ Print the OSD names below this node, recursively if the node has
-        children.
+def walk(node, bucket_type):
+    """ Print the nodes below this node, recursively if it has children.
     """
-    if node['type'] == 'osd':
+    if node['type'] == bucket_type:
         print node['name']
         return
     if node['children']:
         for child_id in node['children']:
             child = NODES_BY_ID[child_id]
-            walk(child)
+            walk(child, bucket_type)
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(
-        description='Print a list of OSDs in a given CRUSH bucket/node.')
-    PARSER.add_argument('bucket', help='print all OSDs below this CRUSH bucket')
+        description='Print a list of nodes in a given CRUSH bucket.')
+    PARSER.add_argument('bucket', help='print all nodes below this CRUSH bucket')
+    PARSER.add_argument('--type', default='osd',
+                        help='search for nodes of this type')
     ARGS = PARSER.parse_args()
     PARENT_NAME = ARGS.bucket
 
@@ -51,5 +57,5 @@ if __name__ == "__main__":
     except KeyError:
         raise Exception("Unknown CRUSH bucket '%s'" % PARENT_NAME)
 
-    walk(PARENT)
+    walk(PARENT, ARGS.type)
 
