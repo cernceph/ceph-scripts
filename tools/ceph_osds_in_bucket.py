@@ -29,15 +29,17 @@ def prepare(nodes):
     return by_id, by_name
 
 def walk(node, bucket_type):
-    """ Print the nodes below this node, recursively if it has children.
+    """ Return a list of node names below this node, recursively if the node has
+        children.
     """
     if node['type'] == bucket_type:
-        print node['name']
-        return
+        return [node['name'],]
     if node['children']:
+        children = []
         for child_id in node['children']:
             child = NODES_BY_ID[child_id]
-            walk(child, bucket_type)
+            children = children + walk(child, bucket_type)
+        return children
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(
@@ -57,5 +59,6 @@ if __name__ == "__main__":
     except KeyError:
         raise Exception("Unknown CRUSH bucket '%s'" % PARENT_NAME)
 
-    walk(PARENT, ARGS.type)
-
+    FOUND = walk(PARENT, ARGS.type)
+    for f in FOUND:
+        print f
