@@ -8,6 +8,7 @@ import os
 
 mon_reweight_min_bytes_per_osd = 100*1024*1024
 mon_reweight_min_pgs_per_osd = 10
+VERBOSE = False
 
 def get_weight(osd, type='reweight'):
   try:
@@ -17,11 +18,11 @@ def get_weight(osd, type='reweight'):
 
 def change_weight(osd, new_weight, really):
   cmd = "ceph osd reweight %d %5f &" % (osd, new_weight)
-  print cmd
+  if VERBOSE: print cmd
   if really:
     os.system(cmd)
   else:
-    print "add --really to run the above command"
+    print "add --really to run '%s'" % cmd
 
 def reweight_by_utilization(options):
   if options.oload <= 100:
@@ -52,7 +53,7 @@ def reweight_by_utilization(options):
       raise Exception('Refusing to reweight: we only have %d PGs across %d osds!' % (num_pg_copies, num_osds))
 
     average_util = num_pg_copies / weight_sum
-    print "weight_sum: %3f, num_pg_copies: %d, num_osds: %d" % (weight_sum, num_pg_copies, num_osds)
+    if VERBOSE: print "weight_sum: %3f, num_pg_copies: %d, num_osds: %d" % (weight_sum, num_pg_copies, num_osds)
 
   else:
     num_osd = len(pgm['osd_stats'])
@@ -65,12 +66,12 @@ def reweight_by_utilization(options):
 
     average_util = float(pgm['osd_stats_sum']['kb_used']) / float(pgm['osd_stats_sum']['kb'])
 
-  print "Found %d OSDs in total" % len(pgm['osd_stats'])
+  if VERBOSE: print "Found %d OSDs in total" % len(pgm['osd_stats'])
 
   # filter out the empty osds
   nonempty_osds = [ osd for osd in pgm['osd_stats'] if float(osd['kb']) > 0 and get_weight(osd['osd'],type='crush_weight') > 0 ]
 
-  print "Found %d non-empty OSDs" % len(nonempty_osds)
+  if VERBOSE: print "Found %d non-empty OSDs" % len(nonempty_osds)
 
   # optionally filter out osds not in the requested bucket
   # and recalculate average_util
@@ -89,7 +90,7 @@ def reweight_by_utilization(options):
         sum_kb_used += osd['kb_used']
         filtered_osds.insert(0, osd)
     average_util = float(sum_kb_used) / float(sum_weight)
-    print "Found %d OSDs after filtering by bucket" % len(filtered_osds)
+    if VERBOSE: print "Found %d OSDs after filtering by bucket" % len(filtered_osds)
   else:
     filtered_osds = nonempty_osds
 
@@ -107,9 +108,8 @@ def reweight_by_utilization(options):
   # but aggressively adjust weights up whenever possible
   underload_util = average_util
 
-  print "average_util: %04f, overload_util: %04f, underload_util: %04f. " %(average_util, overload_util, underload_util)
+  if VERBOSE: print "average_util: %04f, overload_util: %04f, underload_util: %04f. " %(average_util, overload_util, underload_util)
 
-  print "reweighting: "
   n = 0
   for osd in osds:
     if options.by_pg:
@@ -128,7 +128,7 @@ def reweight_by_utilization(options):
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
       new_weight = max(new_weight, weight - options.max_change)
-      print "%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
+      print "osd.%d (%4f >= %4f) [%04f -> %04f]" % (osd['osd'], util, overload_util, weight, new_weight)
       if options.doit: change_weight(osd['osd'], new_weight, options.really)
       n += 1
       if n >= options.num_osds: break
@@ -140,7 +140,7 @@ def reweight_by_utilization(options):
       if new_weight > 1.0:
         new_weight = 1.0
       if new_weight > weight:
-        print "%d (%4f <= %4f) [%04f -> %04f]" % (osd['osd'], util, underload_util, weight, new_weight)
+        print "osd.%d (%4f <= %4f) [%04f -> %04f]" % (osd['osd'], util, underload_util, weight, new_weight)
         if options.doit: change_weight(osd['osd'], new_weight, options.really)
         n += 1
         if n >= options.num_osds: break
@@ -181,7 +181,10 @@ if __name__ == "__main__":
                   help="Really really do it! This will change your crush map.")
   parser.add_option("--bucket", action="append",
                     help="Only reweight OSDs in this CRUSH bucket")
+  parser.add_option("--verbose", action="store_true", help="Be verbose")
   (options, args) = parser.parse_args()
+
+  VERBOSE = options.verbose
 
   if options.bucket and options.by_pg:
     raise Exception("Use of --by-pg and --bucket at the same time is not implemented")
