@@ -118,7 +118,7 @@ def reweight_by_utilization(options):
       util = float(osd['kb_used']) / (get_weight(osd['osd'],type='crush_weight') * 1024*1024*1024)
 
     # skip the OSDs that do not contain anything (probably a different crush root)
-    if util < 0.01:
+    if util < 0.001:
       continue
 
     if util >= overload_util:
