@@ -4,8 +4,7 @@ from cephinfo import cephinfo
 import ceph_osds_in_bucket
 from optparse import OptionParser
 from collections import defaultdict
-import commands
-
+import os
 
 mon_reweight_min_bytes_per_osd = 100*1024*1024
 mon_reweight_min_pgs_per_osd = 10
@@ -17,12 +16,10 @@ def get_weight(osd, type='reweight'):
     return 0.0
 
 def change_weight(osd, new_weight, really):
-  cmd = "ceph osd reweight %d %5f" % (osd, new_weight)
+  cmd = "ceph osd reweight %d %5f &" % (osd, new_weight)
   print cmd
   if really:
-    (status, output) = commands.getstatusoutput(cmd)
-    if status:
-      raise Exception('Non-zero exit status (%d) from command: %s %s' % (status, cmd, output))
+    os.system(cmd)
   else:
     print "add --really to run the above command"
 
