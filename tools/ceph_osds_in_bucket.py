@@ -32,15 +32,31 @@ def walk(node, bucket_type):
     """ Return a list of node names below this node, recursively if the node has
         children.
     """
+    global nodes_by_id
+
     if node['type'] == bucket_type:
         return [node['name'],]
     if node['children']:
         children = []
         for child_id in node['children']:
-            child = NODES_BY_ID[child_id]
+            child = nodes_by_id[child_id]
             children = children + walk(child, bucket_type)
         return children
 
+def list(bucket, type='osd'):
+    global nodes_by_id
+
+    tree = commands.getoutput('ceph osd tree -f json')
+    all_nodes = json.loads(tree)['nodes']
+    nodes_by_id, nodes_by_name = prepare(all_nodes)
+    
+    try:
+        parent = nodes_by_name[bucket]
+    except KeyError:
+        raise Exception("Unknown CRUSH bucket '%s'" % bucket)
+    
+    return walk(parent, type)
+    
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser(
         description='Print a list of nodes in a given CRUSH bucket.')
@@ -48,17 +64,7 @@ if __name__ == "__main__":
     PARSER.add_argument('--type', default='osd',
                         help='search for nodes of this type')
     ARGS = PARSER.parse_args()
-    PARENT_NAME = ARGS.bucket
 
-    TREE = commands.getoutput('ceph osd tree -f json')
-    NODES = json.loads(TREE)['nodes']
-    NODES_BY_ID, NODES_BY_NAME = prepare(NODES)
-
-    try:
-        PARENT = NODES_BY_NAME[PARENT_NAME]
-    except KeyError:
-        raise Exception("Unknown CRUSH bucket '%s'" % PARENT_NAME)
-
-    FOUND = walk(PARENT, ARGS.type)
+    FOUND = list(ARGS.bucket, ARGS.type)
     for f in FOUND:
         print f
