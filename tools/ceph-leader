@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# ceph-leader
+#
+# Small silent script that exits 0 if the current machine is a ceph-mon leader
+# and exits non-zero otherwise.
+
+HOSTNAME=$(hostname -s)
+if [ -e /var/run/ceph/ceph-mon.${HOSTNAME}.asok ]
+then
+    ceph daemon mon.${HOSTNAME} mon_status 2>/dev/null | jq -e '.state == "leader"' &> /dev/null
+    exit $?
+else
+    exit 1
+fi
