@@ -132,6 +132,7 @@ def reweight_by_utilization(options):
       # assign a higher weight.. if we can
       weight = get_weight(osd['osd'])
       new_weight = (average_util / util) * float(weight)
+      new_weight = max(new_weight, weight + 0.01)
       new_weight = min(new_weight, weight + options.max_change)
       if new_weight > 1.0:
         new_weight = 1.0
