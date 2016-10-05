@@ -6,8 +6,18 @@ from optparse import OptionParser
 from collections import defaultdict
 import os
 
-mon_reweight_min_bytes_per_osd = 100*1024*1024
+# don't reweight if we have too few OSDs
+MIN_OSDS = 2
+
+# don't reweight if there is less than 100GB per OSD total capacity
+mon_reweight_min_bytes_per_osd = 10*1024*1024*1024
+
+# don't reweight if there is less than 1GB used capacity per OSD
+mon_reweight_min_bytes_used_per_osd = 1024*1024*1024
+
+# don't reweight if there are less than 10 PGs per OSD
 mon_reweight_min_pgs_per_osd = 10
+
 VERBOSE = False
 
 def get_weight(osd, type='reweight'):
@@ -57,12 +67,16 @@ def reweight_by_utilization(options):
 
   else:
     num_osd = len(pgm['osd_stats'])
+
+    if num_osd < MIN_OSDS:
+      raise Exception("Refusing to reweight: we have only %d OSDs! (%d needed)" % (num_osd, MIN_OSDS))
+
     # Avoid putting a small number (or 0) in the denominator when calculating average_util
     if pgm['osd_stats_sum']['kb'] * 1024 / num_osd < mon_reweight_min_bytes_per_osd:
-      raise Exception("Refusing to reweight: we only have %d kB across all osds!" % pgm['osd_stats_sum']['kb'])
+      raise Exception("Refusing to reweight: we only have %d GB total space across all osds! (%d GB needed)" % (pgm['osd_stats_sum']['kb'] / 1024 / 1024, mon_reweight_min_bytes_per_osd * num_osd / 1024 / 1024 / 1024))
 
-    if pgm['osd_stats_sum']['kb_used'] < 5 * 1024:
-      raise Exception("Refusing to reweight: we only have %d kB across all osds!" % pgm['osd_stats_sum']['kb_used'])
+    if pgm['osd_stats_sum']['kb_used'] * 1024 / num_osd < mon_reweight_min_bytes_used_per_osd:
+      raise Exception("Refusing to reweight: we only have %d GB used across all osds! (%d GB needed)" % (pgm['osd_stats_sum']['kb_used'] / 1024 / 1024, mon_reweight_min_bytes_used_per_osd * num_osd / 1024 / 1024 / 1024))
 
     average_util = float(pgm['osd_stats_sum']['kb_used']) / float(pgm['osd_stats_sum']['kb'])
 
