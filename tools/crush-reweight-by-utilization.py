@@ -201,4 +201,7 @@ if __name__ == "__main__":
     raise Exception("Use of --by-pg and --bucket at the same time is not implemented")
 
   get_weights()
-  reweight_by_utilization(options)
+  try:
+    reweight_by_utilization(options)
+  except Exception as e:
+    if VERBOSE: raise(e)
