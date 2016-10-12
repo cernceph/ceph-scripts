@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Generate a text format histogram of the Ceph PG distribution, optionally normalized to crush weight
+"""
+
+
+from collections import defaultdict
+from cephinfo import cephinfo
+from optparse import OptionParser
+import sys
+import commands
+from histogram import histogram, DataPoint
+
+def get_weights():
+  cephinfo.init_crush()
+
+  osd_weights = dict()
+
+  for osd in cephinfo.crush_data['nodes']:
+    if osd['type'] == 'osd':
+      id = osd['id']
+      reweight = float(osd['reweight'])
+      crush_weight = float(osd['crush_weight'])
+      osd_weights[id] = dict()
+      osd_weights[id]['crush_weight'] = crush_weight
+      osd_weights[id]['reweight'] = reweight
+
+  return osd_weights
+
+if __name__ == "__main__":
+    parser = OptionParser()
+    parser.add_option("--normalize", dest="normalize", default=False, action="store_true",
+                      help="Normalize number of PGs to each OSD's CRUSH weight.")
+    parser.add_option("--pool", dest="pools", action="append",
+                      help="Only work on these Ceph pool IDs.")
+    parser.add_option("-m", "--min", dest="min",
+                      help="minimum value for graph")
+    parser.add_option("-x", "--max", dest="max",
+                      help="maximum value for graph")
+    parser.add_option("-b", "--bins", dest="buckets",
+                      help="Number of bins to use for the histogram")
+    parser.add_option("-l", "--logscale", dest="logscale", default=False,
+                      action="store_true",
+                      help="Bins grow in logarithmic scale")
+    parser.add_option("-B", "--custom-bins", dest="custbuckets",
+                      help="Comma seperated list of bin " +
+                      "edges for the histogram")
+    parser.add_option("--no-mvsd", dest="mvsd", action="store_false",
+                      default=True, help="Disable the calculation of Mean, " +
+                      "Variance and SD (improves performance)")
+    parser.add_option("-f", "--bin-format", dest="format", default="%10.4f",
+                      help="format for bin numbers")
+    parser.add_option("-p", "--percentage", dest="percentage", default=False,
+                      action="store_true", help="List percentage for each bar")
+    parser.add_option("--dot", dest="dot", default='∎', help="Dot representation")
+    (options, args) = parser.parse_args()
+    options.agg_value_key = False
+    options.agg_key_value = False
+
+    cephinfo.init_pg()
+    osd_weights = get_weights()
+    osds = defaultdict(int)
+
+    for pg in cephinfo.get_pg_stats():
+        poolid = pg['pgid'].split('.')[0]
+        if not all and poolid not in options.pools:
+            continue
+        for osd in pg['acting']:
+            osds[osd] += 1
+
+    if options.normalize:
+        values = [DataPoint(osds[osd] / osd_weights[osd]['crush_weight'], 1) for osd in osds]
+    else:
+        values = [DataPoint(osds[osd], 1) for osd in osds]
+
+    histogram(values, options)
