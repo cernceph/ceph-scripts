@@ -8,7 +8,7 @@ import commands
 def rbd_prefix_to_name(options):
   prefix = options.prefix.replace('rbd_data.','id_')
   pool = options.pool
-  cmd = 'rados getomapval -p %s rbd_directory %s' % (pool, prefix)
+  cmd = 'rados getomapval -p %s rbd_directory %s | grep \'^[0-9]\'' % (pool, prefix)
   output = commands.getoutput(cmd)
   name = ''
   lines = [x.strip() for x in output.split("\n")]

@@ -48,7 +48,7 @@ die "Usage: $0 logfile.gz [logfile2.gz ...]\n" if (scalar @ARGV < 1);
 
 foreach my $log_file (@ARGV) {
 
-  open (IN, "zcat $log_file |");
+  open (IN, "zcat -f $log_file |");
 
   while (<IN>) {
 
