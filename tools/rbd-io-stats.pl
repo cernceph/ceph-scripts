@@ -52,7 +52,7 @@ foreach my $log_file (@ARGV) {
 
   while (<IN>) {
 
-    if (/10 filestore\(\/var\/lib\/ceph\/osd\/.+(\d+)\) write (\S+) (\d+)~(\d+) = (\d+)/) {
+    if (/10 filestore\(\/var\/lib\/ceph\/osd\/ceph-(\d+)\) write (\S+) (\d+)~(\d+) = (\d+)/) {
 #2014-04-14 03:14:03.924341 7fb39df16700 10 filestore(/var/lib/ceph/osd/osd.0) write 4.b1d_head/9ac3fb1d/rbd_data.eed4792ae8944a.0000000000003260/head//4 712704~503808 = 503808
 #2014-08-11 12:43:25.477693 7f022d257700 10 filestore(/var/lib/ceph/osd/ceph-0) write 3.48_head/14b1ca48/rbd_data.41e16619f5eb6.0000000000001bd1/head//3 3641344~4608 = 4608
       my ($osd, $object, $start, $foo, $length) = ($1, $2, $3, $4, $5);
@@ -71,7 +71,7 @@ foreach my $log_file (@ARGV) {
       $object =~ m/rbd_data\.(.+)\./;
       my $rbd = 'rbd_data.'.$1;
       $w_rbds{$rbd}++;
-    } elsif (/10 filestore\(\/var\/lib\/ceph\/osd\/.+(\d+)\) FileStore::read (\S+) (\d+)~(\d+)\/(\d+)/) {
+    } elsif (/10 filestore\(\/var\/lib\/ceph\/osd\/ceph-(\d+)\) FileStore::read (\S+) (\d+)~(\d+)\/(\d+)/) {
 # 2014-04-14 03:14:22.622039 7fb392427700 10 filestore(/var/lib/ceph/osd/osd.0) FileStore::read 4.fe9_head/56091fe9/rbd_data.114cff265bee204.0000000000000e9a/head//4 40960~4096/4096
       my ($osd, $object, $start, $foo, $length) = ($1, $2, $3, $4, $5);
       $r_osds{$osd}++;
