@@ -186,8 +186,8 @@ if __name__ == "__main__":
                   help="Only work on these pools.")
   parser.add_option("--no-increasing", dest="no_increasing", action="store_true",
                   help="Also adjust weights up if OSDs are below ideal weight")
-  parser.add_option("--max-change", dest="max_change", type="float", default=0.05,
-                  help="Maximum weight change to each OSD (default 0.05)")
+  parser.add_option("--max-change", dest="max_change", type="float", default=0.01,
+                  help="Maximum weight change to each OSD (default 0.01)")
   parser.add_option("--num-osds", dest="num_osds", type="int", default=4,
                   help="Number of OSDs to change (default 4)")
   parser.add_option("--doit", dest="doit", action="store_true",
