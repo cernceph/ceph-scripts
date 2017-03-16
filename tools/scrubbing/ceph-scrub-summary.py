@@ -6,23 +6,43 @@ except ImportError: import json
 import commands
 import time
 import argparse
+import rados
 
 parser = argparse.ArgumentParser(description='Discover ceph OSDs which have not yet been prepared and prepare them.')
 parser.add_argument('--max-scrubs', dest='MAX_SCRUBS', type=int, default=0,
                     help='Maximum number of scrubs to trigger (default: %(default)s)')
 parser.add_argument('--sleep', dest='SLEEP', type=int, default=0,
                     help='Sleep this many seconds then run again, looping forever. 0 disables looping. (default: %(default)s)')
+parser.add_argument('--conf', dest='CONF', type=str, default="/etc/ceph/ceph.conf",
+                    help='Ceph config file. (default: %(default)s)')
 
 args = parser.parse_args()
 MAX_SCRUBS = args.MAX_SCRUBS
 SLEEP = args.SLEEP
+CONF = args.CONF
+
+# Connect to cluster
+try:
+  cluster = rados.Rados(conffile=CONF)
+except TypeError as e:
+  print 'Argument validation error: ', e
+  raise e
+
+try:
+  cluster.connect()
+except Exception as e:
+  print "connection error: ", e
+  raise e
 
 while(True):
 
   print "Dumping pg info."
-  output = commands.getoutput('ceph pg dump -f json 2>/dev/null')
+
+  cmd = {'prefix': 'pg dump', 'format': 'json'}
+  ret, buf, out = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+
   print "Loading pg stats json."
-  pg_dump = json.loads(output)
+  pg_dump = json.loads(buf)
   pg_stats = pg_dump['pg_stats']
 
   # Which PGs are scrubbing?
@@ -111,4 +131,5 @@ while(True):
   else:
     break
 
-
+# Disconnect
+cluster.shutdown()
