@@ -24,7 +24,8 @@ def devs_sorted(x):
 def ceph_disk_list():
   script_dir = os.path.dirname(os.path.realpath(__file__))
   # run ceph-disk list to discover ceph devices
-  status, output = commands.getstatusoutput('%s/ceph-disk list --format json' % script_dir)
+#  status, output = commands.getstatusoutput('%s/ceph-disk list --format json' % script_dir)
+  status, output = commands.getstatusoutput('ceph-disk list --format json')# % script_dir)
   if status != 0:
     raise Error("Error running ceph-disk list")
 
@@ -233,7 +234,10 @@ def compute_work(ideal, present, reusable_journals):
   for osd, journal in ideal:
     if osd not in prepared_osds:
       if journal == '':
-        work.append('ceph-disk prepare /dev/%s' % osd)
+        if args.bluestore:
+          work.append('ceph-disk prepare --bluestore /dev/%s' % osd)
+        else:
+          work.append('ceph-disk prepare /dev/%s' % osd)
       elif reusable_journals:
         work.append('ceph-disk prepare /dev/%s /dev/%s' % (osd, reusable_journals.pop(0)))
       else:
@@ -251,6 +255,9 @@ parser.add_argument('--journal-mode', dest='mode', default='autodiscover',
 parser.add_argument('--format', dest='format', default='commands',
                     choices=['json','commands', 'execute'],
                     help='Set the output format (default: %(default)s)')
+parser.add_argument('--bluestore', dest='bluestore', default=False,
+                    action='store_true',
+                    help='Format disks as bluestore (default False)')
 
 args = parser.parse_args()
 
