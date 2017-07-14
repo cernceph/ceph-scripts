@@ -24,9 +24,9 @@ def get_crush_weight(osd):
       return weight
   raise Exception('Undefined crush_weight for %s' % osd)
 
-def measure_latency():
+def measure_latency(test_pool):
   print "measure_latency: measuring 4kB write latency"
-  latency = commands.getoutput("rados -p test bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'")
+  latency = commands.getoutput("rados -p %s bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'" % test_pool)
   latency_ms = 1000*float(latency) 
   print "measure_latency: current latency is %s" % latency_ms
   return latency_ms
@@ -47,7 +47,7 @@ def crush_reweight(osd, weight, really):
     return
   print "crush_reweight: not really doing it!"
 
-def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, really):
+def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, really):
   # check if there is any work to do:
   update_osd_tree()
 
@@ -60,7 +60,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
     return
 
   # check the latency
-  latency = measure_latency()
+  latency = measure_latency(test_pool)
   if latency > max_latency:
     print "reweight_osds: latency is too high, trying again later"
     return
@@ -90,7 +90,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
     sys.exit(0)
 
 def usage(code=0):
-  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>]'
+  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>]'
   sys.exit(code)
 
 def main(argv):
@@ -99,10 +99,11 @@ def main(argv):
   max_pgs_backfilling = 50
   delta_weight = 0.01
   target_weight = 5.46
+  test_pool = "test"
   really = False
 
   try:
-    opts, args = getopt.getopt(argv,"ho:l:b:d:t:r",["osds=","latency=","backfills=","delta=","target=","really"])
+    opts, args = getopt.getopt(argv,"ho:l:b:d:t:p:r",["osds=","latency=","backfills=","delta=","target=","pool=","really"])
   except getopt.GetoptError:
     usage(2)
   for opt, arg in opts:
@@ -118,6 +119,8 @@ def main(argv):
       delta_weight = float(arg)
     elif opt in ("-t", "--target"):
       target_weight = float(arg)
+    elif opt in ("-p", "--pool"):
+      test_pool = str(arg)
     elif opt in ("-r", "--really"):
       really = True
   if not drain_osds:
@@ -128,9 +131,10 @@ def main(argv):
   print 'Max PGs backfilling: ', max_pgs_backfilling
   print 'Delta weight:', delta_weight
   print 'Target weight:', target_weight
+  print 'Latency test pool:', test_pool
 
   while(True):
-    reweight_osds(drain_osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, really)
+    reweight_osds(drain_osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, really)
     print "main: sleeping 60s"
     time.sleep(60)
 
