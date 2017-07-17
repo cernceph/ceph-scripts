@@ -17,7 +17,7 @@ chown_osd () {
   echo "done with osd.${ID}"
 }
 
-chown ceph:ceph /var/log/ceph /var/lib/ceph/* /var/lib/ceph/*/* /var/lib/ceph /var/run/ceph
+chown ceph:ceph /var/log/ceph /var/lib/ceph /var/lib/ceph/* /var/lib/ceph/tmp/* /var/lib/ceph/boot*/* /var/run/ceph
 
 # this is to make sure sd devices are owned by ceph
 partprobe
