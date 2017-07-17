@@ -17,7 +17,10 @@ chown_osd () {
   echo "done with osd.${ID}"
 }
 
-chown ceph:ceph /var/log/ceph /var/lib/ceph/* /var/lib/ceph /var/run/ceph
+chown ceph:ceph /var/log/ceph /var/lib/ceph/* /var/lib/ceph/*/* /var/lib/ceph /var/run/ceph
+
+# this is to make sure sd devices are owned by ceph
+partprobe
 
 # find all osds, chown ceph:ceph, then stop the osd, chown a 2nd time, then start the OSD.
 for OSD in $(find /var/lib/ceph/osd -maxdepth 1 -mindepth 1 -type d -user root)
