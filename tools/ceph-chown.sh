@@ -12,7 +12,7 @@ chown_osd () {
   systemctl stop ceph-osd@${ID}.service
   echo "starting 2nd chown on osd.${ID} (while ceph-osd is stopped)"
   time find ${DIR} ! -user ceph -print0 | xargs -0 -n 100 chown ceph:ceph
-  partprobe ${DIR}/journal
+  partprobe ${DIR}/journal # make sure journal dev is owned by ceph
   echo "starting osd.${ID}"
   systemctl start ceph-osd@${ID}.service  
   echo "done with osd.${ID}"
@@ -21,9 +21,6 @@ chown_osd () {
 puppet agent --disable 'chown intervention'
 
 chown ceph:ceph /var/log/ceph /var/lib/ceph /var/lib/ceph/* /var/lib/ceph/tmp/* /var/lib/ceph/boot*/* /var/run/ceph
-
-# this is to make sure sd devices are owned by ceph
-partprobe
 
 # find all osds, chown ceph:ceph, then stop the osd, chown a 2nd time, then start the OSD.
 for OSD in $(find /var/lib/ceph/osd -maxdepth 1 -mindepth 1 -type d -user root)
