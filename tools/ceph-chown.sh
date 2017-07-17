@@ -12,6 +12,7 @@ chown_osd () {
   systemctl stop ceph-osd@${ID}.service
   echo "starting 2nd chown on osd.${ID} (while ceph-osd is stopped)"
   time find ${DIR} ! -user ceph -print0 | xargs -0 -n 100 chown ceph:ceph
+  partprobe ${DIR}/journal
   echo "starting osd.${ID}"
   systemctl start ceph-osd@${ID}.service  
   echo "done with osd.${ID}"
@@ -32,5 +33,8 @@ do
 done
 
 wait
+
+# one more partprobe for good measure
+partprobe
 
 echo all done. Set puppet ceph user/group to ceph:ceph before re-enabling puppet. 
