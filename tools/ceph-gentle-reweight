@@ -47,7 +47,7 @@ def crush_reweight(osd, weight, really):
     return
   print "crush_reweight: not really doing it!"
 
-def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, really):
+def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, interval, really):
   # check if there is any work to do:
   update_osd_tree()
 
@@ -90,7 +90,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
     sys.exit(0)
 
 def usage(code=0):
-  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>]'
+  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>] [-i <interval (default=60)>]'
   sys.exit(code)
 
 def main(argv):
@@ -100,10 +100,11 @@ def main(argv):
   delta_weight = 0.01
   target_weight = 5.46
   test_pool = "test"
+  interval = 60
   really = False
 
   try:
-    opts, args = getopt.getopt(argv,"ho:l:b:d:t:p:r",["osds=","latency=","backfills=","delta=","target=","pool=","really"])
+    opts, args = getopt.getopt(argv,"ho:l:b:d:t:p:i:r",["osds=","latency=","backfills=","delta=","target=","pool=","interval=","really"])
   except getopt.GetoptError:
     usage(2)
   for opt, arg in opts:
@@ -121,6 +122,8 @@ def main(argv):
       target_weight = float(arg)
     elif opt in ("-p", "--pool"):
       test_pool = str(arg)
+    elif opt in ("-i", "--interval"):
+      interval = int(arg)
     elif opt in ("-r", "--really"):
       really = True
   if not drain_osds:
@@ -132,11 +135,12 @@ def main(argv):
   print 'Delta weight:', delta_weight
   print 'Target weight:', target_weight
   print 'Latency test pool:', test_pool
+  print 'Run interval:', interval
 
   while(True):
-    reweight_osds(drain_osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, really)
-    print "main: sleeping 60s"
-    time.sleep(60)
+    reweight_osds(drain_osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, interval, really)
+    print "main: sleeping %ss" % interval
+    time.sleep(interval)
 
 if __name__ == "__main__":
   main(sys.argv[1:])
