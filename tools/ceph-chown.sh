@@ -2,6 +2,8 @@
 # Used to chown all Ceph OSD files, which is a needed step for
 # a hammer to jewel upgrade.
 
+export PATH=/opt/puppetlabs/bin:$PATH
+
 chown_osd () {
   DIR=$1
   ID=$(cat ${DIR}/whoami) || (echo ${1} is not mounted && return 1)
