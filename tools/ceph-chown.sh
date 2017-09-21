@@ -15,7 +15,8 @@ chown_osd () {
   echo "starting 2nd chown on osd.${ID} (while ceph-osd is stopped)"
   time find ${DIR} ! -user ceph -print0 | xargs -0 -n 100 chown ceph:ceph
   echo "starting osd.${ID}"
-  chown ceph:ceph /var/log/ceph/ceph-osd.${ID}.log
+  chown ceph:ceph /var/log/ceph/ceph-osd.${ID}.log # so ceph can open the log
+  chown ceph:ceph /var/lib/ceph/osd/ceph-${ID}/journal # in case udev doesn't create this correctly
   systemctl start ceph-osd@${ID}.service  
   echo "done with osd.${ID}"
 }
