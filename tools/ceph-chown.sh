@@ -23,6 +23,9 @@ chown_osd () {
 
 puppet agent --disable 'chown intervention'
 
+# set noout, because osds can go down for awhile
+ceph osd set noout
+
 chown ceph:ceph /var/log/ceph /var/lib/ceph /var/lib/ceph/* /var/lib/ceph/tmp/* /var/lib/ceph/boot*/* /var/run/ceph
 
 # find all osds, chown ceph:ceph, then stop the osd, chown a 2nd time, then start the OSD.
