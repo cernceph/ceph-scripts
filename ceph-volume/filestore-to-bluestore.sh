@@ -16,7 +16,8 @@ do
   echo ceph osd out ${osds[i]}
   echo systemctl stop ceph-osd@${osds[i]}
   echo sleep 5s
-  echo ceph osd purge ${osds[i]}
+  echo ceph auth del osd.${osds[i]}
+  echo ceph osd rm ${osds[i]}
   echo ceph-volume lvm zap ${disks[i]}
   echo ceph-volume lvm create --bluestore --osd-id ${osds[i]} --data ${disks[i]}
   echo sleep 6h
