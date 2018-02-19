@@ -1,3 +1,5 @@
+#!/bin/bash
+
 echo "This script will ERASE this host's osds from the cluster"
 read -p "Are you sure you want to proceed? (y/n): " -r
 case $REPLY in
