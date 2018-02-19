@@ -18,6 +18,6 @@ do
   echo sleep 5s
   echo ceph osd purge ${osds[i]}
   echo ceph-volume lvm zap ${disks[i]}
-  echo ceph-volume lvm create --bluestore --data ${disks[i]}
+  echo ceph-volume lvm create --bluestore --osd-id ${osds[i]} --data ${disks[i]}
   echo sleep 6h
 done
