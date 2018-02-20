@@ -8,8 +8,10 @@ case $REPLY in
   * ) echo "Exiting..."; exit 0;;
 esac
 
+[ -z "$SLEEP" ] && $SLEEP=1h
+
 disks=($(ceph-disk list | grep 'ceph data' | awk '{ print substr($1, 0, length($1)-1) }'))
-osds=($(ceph-disk list | grep -oP '(?<=osd\.)[0-9]{0,5}'))
+osds=($(ceph-disk list | grep -oP '(?<=osd\.)[0-9]+'))
 
 for i in ${!osds[@]};
 do
@@ -20,5 +22,6 @@ do
   echo ceph osd rm ${osds[i]}
   echo ceph-volume lvm zap ${disks[i]}
   echo ceph-volume lvm create --bluestore --osd-id ${osds[i]} --data ${disks[i]}
-  echo sleep 6h
+  echo sleep $SLEEP
 done
+
