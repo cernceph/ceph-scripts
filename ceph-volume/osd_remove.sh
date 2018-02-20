@@ -7,11 +7,6 @@ case $REPLY in
   * ) echo "Exiting..."; exit 0;;
 esac
 
-if [[ $(pgrep ceph-osd | wc -l) == 0 ]]; then
-	echo -e "No ceph-osd process running in this host.\nExiting..."
-	exit 0
-fi
-
 echo "Killing all ceph-osd processes..."
 kill $(pgrep ceph-osd)
 sleep 5

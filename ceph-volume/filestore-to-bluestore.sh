@@ -8,8 +8,8 @@ case $REPLY in
   * ) echo "Exiting..."; exit 0;;
 esac
 
-disks=($(df | grep ceph | awk '{ print substr($1, 0, length($1)-1) }'))
-osds=($(df | grep -oP "(?<=ceph-)[0-9]{1,5}"))
+disks=($(ceph-disk list | grep 'ceph data' | awk '{ print substr($1, 0, length($1)-1) }'))
+osds=($(ceph-disk list | grep -oP '(?<=osd\.)[0-9]{0,5}'))
 
 for i in ${!osds[@]};
 do
