@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+
+import json, subprocess
+
+JSON = subprocess.check_output(['ceph-volume', 'lvm', 'list', '--format=json'])
+
+jj = json.loads(JSON)
+
+for osd_id in jj:
+   print subprocess.check_output(['ceph-volume', 'lvm', 'activate', osd_id, jj[osd_id][0]['tags']['ceph.osd_fsid']])
