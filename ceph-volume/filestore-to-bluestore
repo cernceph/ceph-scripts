@@ -14,13 +14,13 @@ osds=($(ceph-disk list | grep -oP '(?<=osd\.)[0-9]+'))
 
 for i in ${!osds[@]};
 do
-  if [[ ceph osd metadata ${osds[i]} | grep -P '"osd_objectstore":\s*"filestore"' ]]
+  if ceph osd metadata ${osds[i]} | grep -P '"osd_objectstore":\s*"filestore"'
   then
     echo ceph osd out ${osds[i]}
-    echo while ! ceph osd safe-to-destroy ${osds[i]} ; sleep 10 ; done
+    echo 'while ! ceph osd safe-to-destroy ${osds[i]} ; do sleep 10 ; done'
     echo systemctl kill ceph-osd@${osds[i]}
 
-    if [[ mount | grep -P "/var/lib/ceph/osd/ceph-${osds[i]}\b" ]]
+    if mount | grep -P "/var/lib/ceph/osd/ceph-${osds[i]}\b"
     then
       echo unmount /var/lib/ceph/osd/ceph-${osds[i]}
     fi
