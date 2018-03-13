@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+yes 'will cite' | parallel --bibtex
+
+osd_file=`mktemp`
+
+ceph-disk list --format json \
+| jq -r '.[].partitions[]? | select(.journal_dev!=null and .fs_type!="LVM2_member") | [.whoami,.path,.journal_dev] | join("\t")' \
+| sort -k3 > $osd_file
+
+ssds=(`cat $osd_file | awk '{ print $3 }' | sed 's/.$//' | uniq`)
+ssd_num=${#ssds[*]}
+hdd_num=`wc -l < $osd_file`
+let "partitions_per_ssd=($hdd_num+$ssd_num-1)/$ssd_num" #ceil(hdd_num/ssd_num)
+
+if [[ $partitions_per_ssd == 1 ]]; then
+  echo "Machine has no journals"
+  exit 1
+fi
+
+ssd_total_GiB=`IFS=$'\n'; lsblk -io KNAME,TYPE,SIZE | grep disk | sed 's/^/\/dev\//' \
+                | grep -- "${ssds[*]}" | awk '{total+=$3} END {print int(total)}'`
+
+let "ssd_partition_size=$ssd_total_GiB/$partitions_per_ssd/${#ssds[*]}"
+
+out_and_destroy()
+{
+  osd_id=$1
+  osd_block=$(echo $2 | sed 's/.$//')
+  journal_block=$(echo $3 | sed 's/.$//')
+  journal_num=$(echo ${3: -1})
+
+  if [[ -z $osd_id  ]]; then
+    return 1
+  fi
+
+  echo ceph osd out $osd_id
+  echo "while ! ceph osd safe-to-destroy  $osd_id; do sleep 10 ; done"
+  echo systemctl kill ceph-osd@$osd_id
+
+  if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
+  then
+    echo unmount /var/lib/ceph/osd/ceph-$osd_id
+  fi
+
+  echo ceph osd destroy $osd_id --yes-i-really-mean-it
+  echo ceph-volume lvm zap $osd_block
+  echo parted $journal_block rm $journal_num
+}
+export -f out_and_destroy
+
+create_new_osd()
+{
+  osd_id=$1
+  hdd_block=$(echo $2 | sed 's/.$//')
+  ssd_block=$4
+
+  if [[ -z $osd_id  ]]; then
+    return 1
+  fi
+
+  echo "ceph-volume lvm create --bluestore --osd-id $osd_id --data $hdd_block --block.db $ssd_block"
+}
+export -f create_new_osd
+
+for ssd in ${ssds[*]};
+do
+  grep $ssd $osd_file | parallel -C '\t' out_and_destroy
+
+  for i in `seq 0 $(($partitions_per_ssd-1))`;
+  do
+    echo parted -a optimal $ssd mkpart primary \
+                      "$((i*$ssd_partition_size))GiB" \
+                      "$(((i+1)*$ssd_partition_size))GiB"
+  done
+  parallel -C '\t' --xapply create_new_osd :::: <(grep $ssd $osd_file) ::: `seq 1 $partitions_per_ssd`
+done
+
+rm -f $osd_file
