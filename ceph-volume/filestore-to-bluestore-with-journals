@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-yes 'will cite' | parallel --bibtex
+yes 'will cite' | parallel --bibtex > /dev/null 2>&1
 
 osd_file=`mktemp`
 
@@ -27,15 +27,13 @@ out_and_destroy()
 {
   osd_id=$1
   osd_block=$(echo $2 | sed 's/.$//')
-  journal_block=$(echo $3 | sed 's/.$//')
-  journal_num=$(echo ${3: -1})
 
   if [[ -z $osd_id  ]]; then
     return 1
   fi
 
   echo ceph osd out $osd_id
-  echo "while ! ceph osd safe-to-destroy  $osd_id; do sleep 10 ; done"
+  echo "while ! ceph osd safe-to-destroy  $osd_id; do sleep 30 ; done"
   echo systemctl kill ceph-osd@$osd_id
 
   if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
@@ -45,7 +43,6 @@ out_and_destroy()
 
   echo ceph osd destroy $osd_id --yes-i-really-mean-it
   echo ceph-volume lvm zap $osd_block
-  echo parted $journal_block rm $journal_num
 }
 export -f out_and_destroy
 
@@ -67,13 +64,15 @@ for ssd in ${ssds[*]};
 do
   grep $ssd $osd_file | parallel -C '\t' out_and_destroy
 
+  echo "dd if=/dev/zero of=$ssd bs=512 count=1"
+  echo "parted mklabel gpt"
   for i in `seq 0 $(($partitions_per_ssd-1))`;
   do
     echo parted -a optimal $ssd mkpart primary \
                       "$((i*$ssd_partition_size))GiB" \
                       "$(((i+1)*$ssd_partition_size))GiB"
   done
-  parallel -C '\t' --xapply create_new_osd :::: <(grep $ssd $osd_file) ::: `seq 1 $partitions_per_ssd`
+  parallel -C '\t' --xapply create_new_osd :::: <(grep $ssd $osd_file) ::: `seq 1 $partitions_per_ssd | sed "s|^|$ssd|"`
 done
 
 rm -f $osd_file
