@@ -42,6 +42,8 @@ def walk(node, bucket_type):
             child = nodes_by_id[child_id]
             children = children + walk(child, bucket_type)
         return children
+    else:  
+      	return []
 
 def list(bucket, type='osd'):
     global nodes_by_id
