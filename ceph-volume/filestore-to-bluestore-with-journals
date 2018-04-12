@@ -35,15 +35,15 @@ out_and_destroy()
   while ! ceph osd safe-to-destroy  $osd_id; do sleep 30 ; done
   systemctl stop ceph-osd@$osd_id
 
-  sleep 10
+  sleep 20
 
   if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
   then
-    umount -l /var/lib/ceph/osd/ceph-$osd_id
+    umount /var/lib/ceph/osd/ceph-$osd_id || exit 1
   fi
 
-  ceph osd destroy $osd_id --yes-i-really-mean-it
-  ceph-volume lvm zap $osd_block
+  ceph osd destroy $osd_id --yes-i-really-mean-it || exit 1
+  ceph-volume lvm zap $osd_block || exit 1
 }
 export -f out_and_destroy
 
@@ -57,7 +57,8 @@ create_new_osd()
     return 1
   fi
 
-  ceph-volume lvm create --bluestore --osd-id $osd_id --data $hdd_block --block.db $ssd_block
+  ceph-volume lvm create --bluestore --osd-id $osd_id --data $hdd_block --block.db $ssd_block || exit 1
+  ceph osd in $osd_id || exit 1
 }
 export -f create_new_osd
 
