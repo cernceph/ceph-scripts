@@ -31,10 +31,14 @@ def measure_latency(test_pool):
   print "measure_latency: current latency is %s" % latency_ms
   return latency_ms
 
+# This really should invoke and parse -f json
 def get_num_backfilling():
-  cmd = "ceph health detail | grep pg | grep -v stuck | grep backfilling | wc -l"
+  cmd = "ceph pg stat | tr ',:' '\n' | awk '/backfilling/ { total += $1}; END { print total}'"
   out = commands.getoutput(cmd)
-  n = int(out)
+  if not out:
+    n = 0
+  else:
+    n = int(out)
   print "get_num_backfilling: PGs currently backfilling: %s" % n
   return n
 
