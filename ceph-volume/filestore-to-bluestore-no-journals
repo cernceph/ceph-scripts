@@ -1,0 +1,76 @@
+#!/bin/bash
+
+echo "This host's filestore osds created by ceph-disk will be erased from " \
+     "the cluster and make new ones with the bluestore format using ceph-volume"
+read -p "Are you sure you want to proceed? (y/n): " -r
+
+case $REPLY in
+  y ) echo "Starting osd removal operation.";;
+  * ) echo "Exiting..."; exit 0;;
+esac
+
+should_exit=no
+for package in ceph jq parallel;
+do
+  if ! rpm -q $package > /dev/null; then
+    echo $package " is not installed"
+    should_exit=yes
+  fi
+done
+if [[ $should_exit == yes ]]; then exit 1; fi
+
+yes 'will cite' | parallel --bibtex > /dev/null 2>&1
+
+set -x
+
+argfile=$(mktemp)
+
+ceph-disk list | grep 'ceph data' | \
+sed -n -r 's/ *(\/dev\/[a-z]+).*osd\.([0-9]+).*/\1 \2/p' > $argfile
+
+out_and_destroy()
+{
+  osd_block=$1
+  osd_id=$2
+
+  if [[ -z $osd_id  ]]; then
+    exit 1
+  fi
+
+  if [[ `ceph osd metadata $osd_id | jq -r .osd_objectstore` == filestore ]];
+  then
+    ceph osd out $osd_id
+    while ! ceph osd safe-to-destroy $osd_id 2> /dev/null; do sleep 5; done
+    systemctl stop ceph-osd@$osd_id
+
+    sleep 5
+
+    if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
+    then
+      umount /var/lib/ceph/osd/ceph-$osd_id || exit 1
+    fi
+
+    ceph osd destroy $osd_id --yes-i-really-mean-it || exit 1
+    ceph-volume lvm zap $osd_block || exit 1
+  fi
+}
+export -f out_and_destroy
+
+create_new_osd()
+{
+  osd_block=$1
+  osd_id=$2
+
+  if [[ -z $osd_id  ]]; then
+    exit 1
+  fi
+
+  ceph-volume lvm create --bluestore --data $osd_block --osd-id $osd_id || exit 1
+  ceph osd in $osd_id || exit 1
+}
+export -f create_new_osd
+
+parallel --col-sep ' ' out_and_destroy :::: $argfile
+parallel --col-sep ' ' create_new_osd  :::: $argfile
+
+rm -f $argfile
