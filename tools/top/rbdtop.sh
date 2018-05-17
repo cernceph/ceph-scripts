@@ -18,7 +18,11 @@ sleep $2;
 
 # gather some logs
 echo -e "${RBDTOP} Logs collected, parsing."
-echo -e "${RBDTOP} logfile is: \n" `ls /var/log/ceph/ceph-osd.$1.log`
+echo -e "${RBDTOP} logfile is: " `ls /var/log/ceph/ceph-osd.$1.log`
+
+echo -e "${RBDTOP} OSD operation summary:"
+cat /var/log/ceph/ceph-osd.55.log | grep -Eo "\[[acrsw][a-z-]+" | sort -h | uniq -c | tr -d '['
+
 
 # deactivate logging before exit
 ceph tell osd.$1 injectargs --debug_ms 0
