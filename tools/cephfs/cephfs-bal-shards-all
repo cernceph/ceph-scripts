@@ -1,0 +1,12 @@
+#!/bin/bash
+
+/root/cephfs-bal-shard dwight /cephfs-dwight/
+/root/cephfs-bal-shard dwight /cephfs-dwight/k8s/
+/root/cephfs-bal-shard dwight /cephfs-dwight/volumes/
+/root/cephfs-bal-shard dwight /cephfs-dwight/volumes/_nogroup/
+
+/root/cephfs-bal-shard flax /cephfs-flax/
+/root/cephfs-bal-shard flax /cephfs-flax/hpcqcd/
+/root/cephfs-bal-shard flax /cephfs-flax/hpcqcd/user/
+/root/cephfs-bal-shard flax /cephfs-flax/volumes/
+/root/cephfs-bal-shard flax /cephfs-flax/volumes/_nogroup/

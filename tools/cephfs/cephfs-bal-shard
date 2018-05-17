@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# which cluster and dir to shard?
+cluster=$1
+target=$2
+
+# get the max_mds setting
+max_mds=`ceph mds dump --format json --cluster ${cluster} 2>/dev/null | jq -r .max_mds`
+
+# cd to the dir to shard
+cd $target
+
+# iterate over the subdirs and pin them
+for dir in `find . -mindepth 1 -maxdepth 1 -type d`
+do
+    # do some hash(subdir name) mod max_mds
+    pin=`echo ${dir} | cksum | awk -v m=${max_mds} '{ print $1 % m }'`
+
+    # pin the dir
+    echo Pinning ${dir} to ${pin}
+    setfattr -n ceph.dir.pin -v ${pin} ${dir}
+done
