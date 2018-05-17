@@ -5,7 +5,8 @@
 # <osd> the id of the osd under scrutiny
 # <time_frame> log gathering period
 
-RBDTOP='\033[1;31m\033[40m[rbdtop]\033[0m'
+start_window=`date '+%F %T'`
+RBDTOP="\033[1;31m\033[40m[$start_window:rbdtop]\033[0m"
 
 
 # activate appropriate debug level 
@@ -19,10 +20,11 @@ sleep $2;
 # gather some logs
 echo -e "${RBDTOP} Logs collected, parsing."
 echo -e "${RBDTOP} logfile is: " `ls /var/log/ceph/ceph-osd.$1.log`
-
 echo -e "${RBDTOP} OSD operation summary:"
 cat /var/log/ceph/ceph-osd.55.log | grep -Eo "\[[acrsw][a-z-]+" | sort -h | uniq -c | tr -d '['
 
+end_window=$(date -d "$start_window today + $2 second" +'%F %T'); echo $end_window " / " $start_window
+echo -e "${RBDTOP} From $start_window to $end_window"
 
 # deactivate logging before exit
 ceph tell osd.$1 injectargs --debug_ms 0
