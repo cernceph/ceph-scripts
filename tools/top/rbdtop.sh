@@ -45,6 +45,14 @@ echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m logfile is: " `ls /va
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m OSD operation summary ($start_window -> $end_window):"
 sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -Eo "\[[acrsw][a-z-]+" | sort -h | uniq -c | tr -d '['
 
+# TODO: print top5 busiest images
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Image statistics:"
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - write: "
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - sparse-read: "
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+
 # deactivate logging before exit
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Deactivate logging"
 ceph tell osd.$1 injectargs --debug_ms 0
