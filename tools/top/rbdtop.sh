@@ -14,10 +14,13 @@ ceph tell osd.$1 injectargs --debug_ms 1
 echo $3 | grep -Eo "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" > /dev/null;
 if [ $? -eq 0 ];
 then 
-	start_window=$3;
+	start_window=`echo $3 | grep -Eo "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}"`;
 else
-	echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Argument 3 mispelled - using current time as time window start"
-	echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m (format expected: 'YYYY-MM-DD HH:MM:SS')"
+	if [ ! -z "$3" ];
+	then 
+		echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Argument 3 mispelled - using current time as time window start"
+		echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m (format expected: 'YYYY-MM-DD HH:MM:SS')"
+	fi
 	start_window=`date '+%F %T'`;
 fi
 
