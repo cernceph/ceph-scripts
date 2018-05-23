@@ -23,10 +23,18 @@ fi
 
 end_window=$(date -d "$start_window today + $2 second" +'%F %T');
 
-# wait for a while 
-# TODO: use sleep only if end_window > now
-echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Gathering logs for $2 secs"
-sleep $2;
+# collect logs
+end_ws=`date -d "$end_window" "+%s"`
+now_ws=`date "+%s"`
+delta=$(($end_ws - $now_ws))
+
+if [ "$end_ws" -ge "$now_ws" ];
+then	#future adjust sleep? 
+	echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Gathering logs for $delta secs"
+	sleep $2;
+else	#past 
+	echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Collecting $2 secs of logs"
+fi
 
 # gather some logs
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Logs collected, parsing"
