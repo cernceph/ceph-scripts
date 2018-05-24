@@ -40,15 +40,24 @@ else	#past
 fi
 
 # gather some logs
+active_image_count=`sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[[acrsw][a-z-]+" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | wc -l`;
+
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Logs collected, parsing"
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m logfile is: " `ls /var/log/ceph/ceph-osd.$1.log`
-echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m OSD operation summary ($start_window -> $end_window):"
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -Eo "\[[acrsw][a-z-]+" | sort -h | uniq -c | tr -d '['
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Timeframe is: $start_window -> $end_window"
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -Eo "\[[wacrs][rep][a-z-]+" | sort -h | uniq -c | tr -d '['
 
 # TODO: print top5 busiest images
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Image statistics:"
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - write: "
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - writefull: "
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[writefull" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+
+echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - read: "
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
 
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - sparse-read: "
 sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
