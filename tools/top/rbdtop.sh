@@ -24,6 +24,10 @@ else
 	start_window=`date '+%F %T'`;
 fi
 
+#
+# TODO: Improve filtering using sed as it may not work everytime
+#
+
 end_window=$(date -d "$start_window today + $2 second" +'%F %T');
 
 # collect logs
@@ -48,7 +52,7 @@ echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Timeframe is: $start_
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
 sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -Eo "\[[wacrs][rep][a-z-]+" | sort -h | uniq -c | tr -d '['
 
-# TODO: print top5 busiest images
+# TODO: limit to top 5 images ?
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Image statistics:"
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - write: "
 sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
