@@ -61,14 +61,14 @@ sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -Eo
 # TODO: limit to top 5 images ?
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m Image statistics:"
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - write: "
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c 
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5 
 
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - writefull: "
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[writefull" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[writefull" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
 
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - read: "
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
 
 echo -e "\033[1;31m\033[40m[`date '+%F %T'`:rbdtop]\033[0m   - sparse-read: "
-sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c
+sed -n "/$start_window/,/$end_window/p" /var/log/ceph/ceph-osd.$1.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
 
