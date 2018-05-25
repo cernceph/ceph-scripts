@@ -7,11 +7,11 @@
 # <threads>	thread count 
 # <io-total>	total io size for rbd bench
 
-
-for i in `seq 1 $1`; 
-do 
-  rbd bench --image jcollet-test-pool/test-image-00 --io-size $2 --io-threads $3 --io-total $4 --io-type read
-  rbd bench --image jcollet-test-pool/test-image-11 --io-size $2 --io-threads $3 --io-total $4 --io-type read
-  rbd bench --image jcollet-test-pool/test-image-11 --io-size $2 --io-threads $3 --io-total $4 --io-type write
-  rbd bench --image jcollet-test-pool/test-image-00 --io-size $2 --io-threads $3 --io-total $4 --io-type write
+for id in 00 11; 
+do
+  for i in `seq 1 $1`; 
+  do
+    rbd bench --image jcollet-test-pool/test-image-$id --io-size $2 --io-threads $3 --io-total $4 --io-type read
+    rbd bench --image jcollet-test-pool/test-image-$id --io-size $2 --io-threads $3 --io-total $4 --io-type write
+  done;
 done; 
