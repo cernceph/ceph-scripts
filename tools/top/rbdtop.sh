@@ -1,7 +1,7 @@
 # !/bin/bash 
 #
-#
-# ./rbdtop.sh <osd> <time frame>
+# Print rbd image usage on current osd
+# usage: ./rbdtop.sh <osd> <time frame>
 # <osd> the id of the osd under scrutiny
 # <time_frame> logs gathering period
 # <start_window> starting point of log analysis window (opt.)
