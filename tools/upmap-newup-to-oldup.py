@@ -64,9 +64,9 @@ if __name__ == '__main__':
         print 'There was an error setting the norebalance/norecover/nobackfill flags'
 
     while True:
-        _input = raw_input("Do the change, wait for the numbers to stabilize and type either (next/quit or n/q): ")
-        if _input in ['n', 'next']: break
-        if _input in ['q', 'quit']: sys.exit(0)
+        _input = raw_input("Do the change, wait for ceph status to stabilize, then yes/no to continue or exit (yes/no or y/n): ")
+        if _input in ['y', 'yes']: break
+        if _input in ['n', 'no']: sys.exit(0)
 
     p_ceph = Popen(cmd_ceph, stdout=PIPE)
     p_jq = Popen(cmd_jq, stdin=p_ceph.stdout, stdout=PIPE)
