@@ -21,8 +21,8 @@ do
 		quota=bytes_quota		
 		for unit in KB MB GB TB PB;
 		do
-			if (( quota < 1024 )); then break; fi
 			let quota/=1024
+			if (( quota < 1024 )); then break; fi
 		done
 		email=`radosgw-admin user info --uid=$user | jq -Mr .email`
 		echo -e  "Hello user $user,\n\nYour S3 usage has reached $percent% of your quota ($quota$unit).\n\n\nRegards,\nCern S3 service team" | mail -s "Cern S3 Storage quota notice" $email 
