@@ -19,7 +19,7 @@ do
         if (( $percent >= 80 ));
 	then
 		quota=bytes_quota		
-		for unit in KB MB GB TB;
+		for unit in KB MB GB TB PB;
 		do
 			if (( quota < 1024 )); then break; fi
 			let quota/=1024
