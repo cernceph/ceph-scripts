@@ -9,25 +9,30 @@ case $REPLY in
   * ) echo "Exiting..."; exit 0;;
 esac
 
-should_exit=no
+should_exit=false
 for package in ceph jq parallel;
 do
   if ! rpm -q $package > /dev/null; then
     echo $package " is not installed"
-    should_exit=yes
+    should_exit=true
   fi
 done
-if [[ $should_exit == yes ]]; then exit 1; fi
+if [[ $should_exit == true ]]; then exit 1; fi
 
 set -x
 
 yes 'will cite' | parallel --bibtex > /dev/null 2>&1
 
-osd_file=`mktemp`
+if [[ ! -z $1 ]];
+then
+  osd_file=$1
+else
+  osd_file=`mktemp --suffix=_osd_list`
 
-ceph-disk list --format json \
-| jq -r '.[].partitions[]? | select(.journal_dev!=null and .fs_type!="LVM2_member") | [.whoami,.path,.journal_dev] | join("\t")' \
-| sed -r "s/([a-z])[0-9]+/\1/g" > $osd_file
+  ceph-disk list --format json \
+  | jq -r '.[].partitions[]? | select(.journal_dev!=null and .fs_type!="LVM2_member") | [.whoami,.path,.journal_dev] | join("\t")' \
+  | sed -r "s/([a-z])[0-9]+/\1/g" > $osd_file
+fi
 
 ssds=(`cat $osd_file | awk '{ print $3 }' | uniq`)
 ssd_num=${#ssds[*]}
@@ -53,9 +58,6 @@ out_and_destroy()
   osd_id=$1
   osd_block=$2
 
-  echo $osd_id "_" $osd_block
-  exit 1
-
   if [[ -z $osd_id  ]]; then
     return 1
   fi
@@ -66,14 +68,7 @@ out_and_destroy()
     while ! ceph osd safe-to-destroy $osd_id; do sleep 10 ; done
     systemctl stop ceph-osd@$osd_id
 
-    tries=5
-    while [[ `ps aux | awk "(/ceph-osd/ && /--id\s+$osd_id/)" | wc -l` == 1 && tries > 0]];
-    do
-      let tries--
-      sleep 1
-    done
-
-    if [[ tries <= 0 ]]; then exit 1; fi
+    sleep 5
 
     if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
     then
@@ -105,6 +100,15 @@ for ssd in ${ssds[*]};
 do
   grep $ssd $osd_file | parallel -C '\t' out_and_destroy
 
+  next=true  
+  cut -f1 < $osd_file | while read a; do 
+    if ! ( ceph osd tree | grep -P "osd.$a\b" | grep osd | grep destroyed );
+    then
+      echo "$a is not destroyed with $ssd"
+      next=false
+    fi
+  done
+  if [[ $next == false ]]; then continue; fi
   dd if=/dev/zero of=$ssd bs=512 count=1
   parted -s $ssd mklabel gpt
   for i in `seq 0 $(($partitions_per_ssd-1))`;
@@ -115,5 +119,3 @@ do
   done
   parallel -C '\t' --xapply create_new_osd :::: <(grep $ssd $osd_file) ::: `seq 1 $partitions_per_ssd | sed "s|^|$ssd|"`
 done
-
-rm -f $osd_file
