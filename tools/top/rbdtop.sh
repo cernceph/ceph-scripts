@@ -76,7 +76,6 @@ then
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Logs collected, parsing"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m logfile is: " `ls /var/log/ceph/ceph-osd.$osd_id.log`
-  echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Timeframe is: $start_window -> $end_window"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
   grep -Eo "\[[wacrs][rep][a-z-]+" /var/log/ceph/ceph-osd.$osd_id.log | sort -h | uniq -c | tr -d '['
   
@@ -116,7 +115,6 @@ else
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Logs collected, parsing"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m logfile is /var/log/ceph/ceph-osd.[0-9]*.log"
-  echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Timeframe is: $start_window -> $end_window"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
   grep -Eo "\[[wacrs][rep][a-z-]+" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '['
   
