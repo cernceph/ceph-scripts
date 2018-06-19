@@ -94,20 +94,19 @@ then
 
 else
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Adjusting debug level to all osds"
-  for i in `ceph osd tree | awk -v HN=$host 'BEGIN{toggle=0}  { if( $0 ~ HN ) {toggle=1}; if(toggle) { if( ($0 ~ /host/ || $0 ~ /rack/) && !($0 ~ HN)) {toggle=0} else { print $0; }}}' | grep -Eo "^[0-9]+" | tail`;
+  for f in `ls /var/run/ceph/ceph-osd.*.asok`; 
   do
-    # activate appropriate debug level 
-    ceph tell osd.$i injectargs --debug_ms 1
+    ceph --admin-daemon $f config set debug_ms 1 | grep -Eo "^admin_socket.*$";
   done
+
 
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Gathering logs for $len secs"
   sleep $len;
 
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Deactivate logging"
-  for i in `ceph osd tree | awk -v HN=$host 'BEGIN{toggle=0}  { if( $0 ~ HN ) {toggle=1}; if(toggle) { if( ($0 ~ /host/ || $0 ~ /rack/) && !($0 ~ HN)) {toggle=0} else { print $0; }}}' | grep -Eo "^[0-9]+" | tail`;
+  for f in `ls /var/run/ceph/ceph-osd.*.asok`; 
   do
-    # deactivate appropriate debug level 
-    ceph tell osd.$i injectargs --debug_ms 0
+    ceph --admin-daemon $f config set debug_ms 0 | grep -Eo "^admin_socket.*$";
   done
 
   # gather some logs
