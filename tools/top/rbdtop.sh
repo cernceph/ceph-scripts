@@ -78,20 +78,20 @@ then
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m logfile is: " `ls /var/log/ceph/ceph-osd.$osd_id.log`
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Timeframe is: $start_window -> $end_window"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
-  cat /var/log/ceph/ceph-osd.$osd_id.log | grep -Eo "\[[wacrs][rep][a-z-]+" | sort -h | uniq -c | tr -d '['
+  grep -Eo "\[[wacrs][rep][a-z-]+" /var/log/ceph/ceph-osd.$osd_id.log | sort -h | uniq -c | tr -d '['
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Image statistics:"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - write: "
-  cat /var/log/ceph/ceph-osd.$osd_id.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5 
+  grep -E "\[write " /var/log/ceph/ceph-osd.$osd_id.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5 
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - writefull: "
-  cat /var/log/ceph/ceph-osd.$osd_id.log | grep -E "\[writefull" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[writefull" /var/log/ceph/ceph-osd.$osd_id.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - read: "
-  cat /var/log/ceph/ceph-osd.$osd_id.log | grep -E "\[read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[read" /var/log/ceph/ceph-osd.$osd_id.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - sparse-read: "
-  cat /var/log/ceph/ceph-osd.$osd_id.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[sparse-read" /var/log/ceph/ceph-osd.$osd_id.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
 
 else
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Adjusting debug level to all osds"
@@ -118,18 +118,18 @@ else
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m logfile is /var/log/ceph/ceph-osd.[0-9]*.log"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Timeframe is: $start_window -> $end_window"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
-  cat /var/log/ceph/ceph-osd.[0-9]*.log | grep -Eo "\[[wacrs][rep][a-z-]+" | sort -h | uniq -c | tr -d '['
+  grep -Eo "\[[wacrs][rep][a-z-]+" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '['
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Image statistics:"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - write: "
-  cat /var/log/ceph/ceph-osd.[0-9]*.log | grep -E "\[write " | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5 
+  grep -E "\[write " /var/log/ceph/ceph-osd.[0-9]*.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5 
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - writefull: "
-  cat /var/log/ceph/ceph-osd.[0-9]*.log | grep -E "\[writefull" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[writefull" /var/log/ceph/ceph-osd.[0-9]*.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - read: "
-  cat /var/log/ceph/ceph-osd.[0-9]*.log | grep -E "\[read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[read" /var/log/ceph/ceph-osd.[0-9]*.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - sparse-read: "
-  cat /var/log/ceph/ceph-osd.[0-9]*.log | grep -E "\[sparse-read" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
+  grep -E "\[sparse-read" /var/log/ceph/ceph-osd.[0-9]*.log | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | sort -k1gr | head -n 5
 fi
