@@ -94,9 +94,11 @@ then
 
 else
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Adjusting debug level to all osds"
-  for f in `ls /var/run/ceph/ceph-osd.*.asok`; 
+  for f in `ls /var/run/ceph/ceph-osd.*.asok | tr -d '[a-zA-Z/\.\-]'`; 
   do
-    ceph --admin-daemon $f config set debug_ms 1 | grep -Eo "^admin_socket.*$";
+    touch /var/log/ceph/ceph-osd."$f".log 
+    echo -n $f" ";
+    ceph tell osd.$f injectargs --debug_ms 1
   done
 
 
@@ -104,9 +106,9 @@ else
   sleep $len;
 
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Deactivate logging"
-  for f in `ls /var/run/ceph/ceph-osd.*.asok`; 
+  for f in `ls /var/run/ceph/ceph-osd.*.asok | tr -d '[a-zA-Z/\.\-]'`; 
   do
-    ceph --admin-daemon $f config set debug_ms 0 | grep -Eo "^admin_socket.*$";
+    ceph tell osd.$f injectargs --debug_ms 0
   done
 
   # gather some logs
@@ -115,7 +117,10 @@ else
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Logs collected, parsing"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m logfile is /var/log/ceph/ceph-osd.[0-9]*.log"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m OSD operation summary ($active_image_count active images):"
-  grep -Eo "\[[wacrs][rep][a-z-]+" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '['
+  grep -Eo "\[write " /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '[' | sed 's/:/ /' | sort -k1gr | head -n 5
+  grep -Eo "\[writefull" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '[' | sed 's/:/ /' | sort -k1gr | head -n 5
+  grep -Eo "\[read" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '[' | sed 's/:/ /' | sort -k1gr | head -n 5
+  grep -Eo "\[sparse-read" /var/log/ceph/ceph-osd.[0-9]*.log | sort -h | uniq -c | tr -d '[' | sed 's/:/ /' | sort -k1gr | head -n 5
   
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m Image statistics:"
   echo -e "\033[1;31m\033[40m[`date '+%F %T'`/rbdtop]\033[0m   - write: "
