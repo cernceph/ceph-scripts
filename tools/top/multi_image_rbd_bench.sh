@@ -12,6 +12,7 @@ for id in 00 11;
 do
   for i in `seq 1 $1`; 
   do
+    echo "benching on test-image-$id";
     rbd bench --image jcollet-test-pool/test-image-$id --io-size $2 --io-threads $3 --io-total $4 --io-type read
     rbd bench --image jcollet-test-pool/test-image-$id --io-size $2 --io-threads $3 --io-total $4 --io-type write
   done;
