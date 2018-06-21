@@ -117,7 +117,7 @@ else
   do
     ./logfilter.awk "$start" "$end" /var/log/ceph/ceph-osd.$id.log > /tmp/rbdtop/ceph-osd.$id.log
   done
-
+  
   # gather some logs
   active_image_count=`cat /tmp/rbdtop/ceph-osd.[0-9]*.log | grep -E "\[[acrsw][a-z-]+" | grep -Eo "rbd_data\.[0-9a-f]+" | sort -h | uniq -c | wc -l`;
   
@@ -145,3 +145,9 @@ fi
 
 #cleanup
 #rm -rf /tmp/rbdtop/
+
+
+#TODO:
+#
+# replace grep in the analysis by awk scripts or lexer ?
+ 
