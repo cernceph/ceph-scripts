@@ -40,9 +40,6 @@ shift $((OPTIND - 1))
 start=`date '+%F %T'`;
 end=`date -d "$start today + 30 second" +'%F %T'`;
 
-# clean logs
-#rm /var/log/ceph/ceph-osd.[0-9]*.log;
-
 # generate OSD list for the current machine
 if [ -z "$osd_id" ];
 then
@@ -147,4 +144,4 @@ else
 fi
 
 #cleanup
-rm -rf /tmp/rbdtop/
+#rm -rf /tmp/rbdtop/
