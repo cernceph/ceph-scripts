@@ -34,7 +34,7 @@ else
   | sed -r "s/([a-z])[0-9]+/\1/g" > $osd_file
 fi
 
-ssds=(`cat $osd_file | awk '{ print $3 }' | uniq`)
+ssds=(`cat $osd_file | awk '{ print $3 }' | sort | uniq`)
 ssd_num=${#ssds[*]}
 
 if [[ $ssd_num == 0 ]];
