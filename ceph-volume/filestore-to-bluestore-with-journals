@@ -100,9 +100,9 @@ for ssd in ${ssds[*]};
 do
   grep $ssd $osd_file | parallel -C '\t' out_and_destroy
 
-  next=true  
-  cut -f1 < $osd_file | while read a; do 
-    if ! ( ceph osd tree | grep -P "osd.$a\b" | grep osd | grep destroyed );
+  next=true
+  cut -f1 < $osd_file | while read a; do
+    if ! ( ceph osd tree | grep -P "osd\.$a\b" | grep destroyed );
     then
       echo "$a is not destroyed with $ssd"
       next=false
