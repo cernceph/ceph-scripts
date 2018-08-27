@@ -5,6 +5,12 @@
 
 
 
-grep -E "\- writefull:" $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n $2
-grep -E "\- write:" $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n $2
-grep -E "\- read:" $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n $2
+grep -E "\- writefull:" -R $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n "$2"
+echo ""
+
+grep -E "\- write:" -R $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n "$2"
+echo ""
+
+grep -E "\- read:" -R $1 -A 15 | grep -Eo "rbd_data.[a-z0-9]+" | sort | uniq -c | sort -h | tail -n "$2"
+echo ""
+
