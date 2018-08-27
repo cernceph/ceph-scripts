@@ -15,7 +15,7 @@ BEGIN {
     if ( $0 ~ /rbdtop|^$/ )
       out = 0;
     else
-    print $0
+    print $2
   
   if( $0 ~ token )
     out = 1;
