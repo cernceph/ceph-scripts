@@ -23,8 +23,12 @@ do
     echo $img
     for imginfile in `grep -E "$img" -R $1 -l`; 
     do
-      echo -n $imginfile" " | grep -Eo "[0-9]{4}\-[0-9]{2}-[0-9]{2}-[0-2][0-9]:[0-5][0-9]:[0-5][0-9]" | tr -d "\n" >> $of/$img.$token.out;
-      cat $imginfile | ./extract_images.awk $token 1 | grep $img  >> $of/$img.$token.out
+      timestamp=`echo -n $imginfile" " | grep -Eo "[0-9]{4}\-[0-9]{2}-[0-9]{2}-[0-2][0-9]:[0-5][0-9]:[0-5][0-9]" | tr -d "\n"`
+      imagestats=`cat $imginfile | ./extract_images.awk $token 1 | grep $img | tr -d "\n"`
+      if [ ! -z "$imagestats" ]
+      then
+        echo $timestamp" "$imagestats  >> $of/$img.$token.out;
+      fi
     done
     # output to img.token.out
   done
