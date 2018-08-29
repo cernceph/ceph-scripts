@@ -1,0 +1,8 @@
+set xdata time
+set style data lines
+set timefmt '%Y-%m-%d-%H:%M:%S'
+set format x "%Y-%m-%d-%H:%M:%S"
+set autoscale y
+set xtics rotate by 45 right
+unset key
+
