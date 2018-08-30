@@ -13,6 +13,15 @@ def upmap(pgid, osds):
 	global cmd_upmap
 	check_call(cmd_upmap.format(id=pgid, osds=' '.join(osds)).split())
 
+def unset_recover():
+    try:
+        check_call('ceph osd unset norebalance'.split())
+        check_call('ceph osd unset norecover'.split())
+        check_call('ceph osd unset nobackfill'.split())
+    except CalledProcessError as e:
+        print 'There was an error unsetting the norebalance/norecover/nobackfill flags'
+	
+
 if __name__ == '__main__':
     pgid = None
     pgmiss = set()
@@ -55,8 +64,11 @@ if __name__ == '__main__':
 
     while True:
         _input = raw_input("Do the change, wait for ceph status to stabilize, then yes/no to continue or exit (yes/no or y/n): ")
-        if _input in ['y', 'yes']: break
-        if _input in ['n', 'no']: sys.exit(0)
+        if _input in ['y', 'yes']:
+		break
+        if _input in ['n', 'no']:
+		unset_recover()
+		sys.exit(0)
 
     p_ceph = Popen(cmd_ceph, stdout=PIPE)
     p_jq = Popen(cmd_jq, stdin=p_ceph.stdout, stdout=PIPE)
@@ -92,9 +104,4 @@ if __name__ == '__main__':
 
     pool.close()
     pool.join()
-    try:
-        check_call('ceph osd unset norebalance'.split())
-        check_call('ceph osd unset norecover'.split())
-        check_call('ceph osd unset nobackfill'.split())
-    except CalledProcessError as e:
-        print 'There was an error unsetting the norebalance/norecover/nobackfill flags'
+    unset_recover()
