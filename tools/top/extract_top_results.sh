@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Usage: ./extract_top_results.sh <path to files> [<output folder>]
+# Usage: ./extract_top_results.sh <path to files> [<output folder>] [<number of plots>]
 #
 
 if [ -z $2 ]
@@ -17,9 +17,18 @@ else
   fi
 fi
 
+if [ -z $3 ]
+then 
+  echo "No tail arg provided, defaults to 10"
+  tailnum=10;
+else
+  echo "Tail argument provided is: $3"
+  tailnum=$3
+fi
+
 rm -f $of/rbd_data*
 
-for token in "write" "read" "sparse-read" "writefull";
+for token in "write" "read" "sparse-read" "writefull"; # Parallel loop here
 do
   echo $token
   for img in `cat $1/* | ./extract_images.awk $token | sort | uniq -c | sort -k1gr | grep -Eo "rbd_data\.[0-9a-z]+"`;
@@ -47,7 +56,7 @@ cat prefix_gnuplot.template > $of/plot.gnu
 
 echo plot \\ >> $of/plot.gnu ; 
 cnt=0;
-for i in `wc -l $of/* | grep -v total | sort -k1g | tr -d " " | sed 's/^[0-9]*//g'`; 
+for i in `wc -l $of/* | grep -v total | sort -k1g | tr -d " " | sed 's/^[0-9]*//g' | tail -n $tailnum`; 
 do
   echo \"$i\" using 1:2 w lp lt $cnt, \\ >> $of/plot.gnu;
   cnt=$((cnt+1));
@@ -56,4 +65,6 @@ done
 
 #
 # TODO: Consider removing rbd image id in output file as featured in the filename itself
+# TODO: Consider parallelize
+# TODO: Consider accounting for op sizes
 #
