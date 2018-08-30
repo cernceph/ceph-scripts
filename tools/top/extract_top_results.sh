@@ -44,9 +44,11 @@ do
       fi
     done
     # output to img.token.out
-  done
+  done &
   echo ""
 done
+
+wait
 
 #
 # GNUPLOT Script generation
