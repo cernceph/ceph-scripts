@@ -140,7 +140,7 @@ def split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment
     sys.exit(0)
 
 def usage(code=0):
-  print 'ceph-gentle-split -p <pool> [-t <latency-test-pool> (default=test)] -g <goal num pgs> [-l <max_latency (default=15)>] [-b <max pgs backfilling (default=10)>] [-s <start time (defualt=02:00)>] [-s <end time (defualt=09:00)>] [-a <day of week,[day of week,...] [-i <max increment (default=10)>]'
+  print 'ceph-gentle-split -p <pool> [-t <latency-test-pool> (default=test)] -g <goal num pgs> [-l <max_latency (default=15)>] [-b <max pgs backfilling (default=10)>] [-s <start time (default=02:00)>] [-e <end time (default=09:00)>] [-a <day of week,[day of week,...] [-i <max increment (default=10)>]'
   sys.exit(code)
 
 def main(argv):
