@@ -64,17 +64,10 @@ def measure_latency(test_pool):
   return latency_ms
 
 def get_num_backfilling():
-  cmd = "ceph health detail | grep pg | grep -v stuck | grep backfilling | wc -l"
+  cmd = "ceph pg ls backfilling | grep -v PG_STAT | wc -l"
   out = commands.getoutput(cmd)
   n = int(out)
   print "get_num_backfilling: PGs currently backfilling: %s" % n
-  return n
-
-def get_num_creating():
-  cmd = "ceph health detail | grep pg | grep -v stuck | grep creating | wc -l"
-  out = commands.getoutput(cmd)
-  n = int(out)
-  print "get_num_creating: PGs currently creating: %s" % n
   return n
 
 def split_pool(pool, pg_num, really):
