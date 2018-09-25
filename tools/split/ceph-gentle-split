@@ -63,6 +63,13 @@ def measure_latency(test_pool):
   print "measure_latency: current latency is %s" % latency_ms
   return latency_ms
 
+def get_num_inactive():
+  cmd = "ceph pg ls | egrep -v 'PG_STAT|active' | wc -l"
+  out = commands.getoutput(cmd)
+  n = int(out)
+  print "get_num_inactive: PGs currently inactive: %s" % n
+  return n
+
 def get_num_backfilling():
   cmd = "ceph pg ls backfilling | grep -v PG_STAT | wc -l"
   out = commands.getoutput(cmd)
@@ -81,6 +88,10 @@ def split_pool(pool, pg_num, really):
 
     print "split_pool: %s" % out
     time.sleep(5)
+
+    # wait until those pgs are created
+    while get_num_inactive():
+      time.sleep(5)
 
     cmd = "ceph osd pool set %s pgp_num %s" % (pool, pg_num)
     status = 1
