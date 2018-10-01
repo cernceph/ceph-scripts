@@ -108,7 +108,7 @@ if __name__ == '__main__':
     pool = Pool(32)
     for pg_id in upmap_items:
         try:
-            proc = pool.apply_async(upmap, (pg_id, up[pg_id]))
+            proc = pool.apply_async(upmap, (pg_id, upmap_items[pg_id]))
         except Exception as e:
             print 'Upmap failed, reason: \n' + str(e)
             sys.exit(0)
