@@ -7,7 +7,7 @@ from subprocess import Popen, check_call, check_output, PIPE, CalledProcessError
 
 cmd_ceph = "ceph pg ls --format=json".split()
 cmd_jq = 'jq --stream -Mcr select(.[0][1]=="pgid"or.[0][1]=="up")|"\(.[0][1][:1])_\(.[1])"'.split()
-cmd_upmap = "ceph osd pg-upmap {id} {items}"
+cmd_upmap = "ceph osd pg-upmap-items {id} {items}"
 
 def upmap(pgid, items):
 	global cmd_upmap
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         if _input in ['y', 'yes']:
 		break
         if _input in ['n', 'no']:
-		unset_recover()
+		#unset_recover()
 		sys.exit(0)
 
     p_ceph = Popen(cmd_ceph, stdout=PIPE)
@@ -97,7 +97,7 @@ if __name__ == '__main__':
             if v != 'null':
                 index = index + 1
                 if up[pgid][index] != v:
-                    upmap_items.setdefault(pgid, []).extend((up[pgid][index], v))
+                    upmap_items.setdefault(pgid, []).extend((v, up[pgid][index]))
             else:
                 del up[pgid]
                 index = -1
@@ -115,4 +115,4 @@ if __name__ == '__main__':
 
     pool.close()
     pool.join()
-    unset_recover()
+    #unset_recover()
