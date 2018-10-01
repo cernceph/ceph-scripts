@@ -7,45 +7,56 @@ from subprocess import Popen, check_call, check_output, PIPE, CalledProcessError
 
 cmd_ceph = "ceph pg ls --format=json".split()
 cmd_jq = 'jq --stream -Mcr select(.[0][1]=="pgid"or.[0][1]=="up")|"\(.[0][1][:1])_\(.[1])"'.split()
-cmd_upmap = "ceph osd pg-upmap {id} {osds}"
+cmd_upmap = "ceph osd pg-upmap {id} {items}"
 
-def upmap(pgid, osds):
+def upmap(pgid, items):
 	global cmd_upmap
-	check_call(cmd_upmap.format(id=pgid, osds=' '.join(osds)).split())
+	check_call(cmd_upmap.format(id=pgid, items=' '.join(items)).split())
 
 if __name__ == '__main__':
     pgid = None
-    pgmiss = set()
     up = {}
-    act = {}
+    upmap_items = {}
 
     try:
-       check_call("ceph osd dump | grep 'require_min_compat_client luminous'", shell=True, stdout=PIPE)
-    except CalledProcessError:
-       print 'This tool uses upmap, which requires having the setting "require_min_compat_client luminous"'
-       sys.exit(1)
+        with open('./state.json', 'r') as fp:
+            print "Loading ./state.json"
+            up = json.load(fp)
+    except:
+        print "No state found, loading from ceph"
 
-    p_ceph = Popen(cmd_ceph, stdout=PIPE)
-    p_jq = Popen(cmd_jq, stdin=p_ceph.stdout, stdout=PIPE)
-
-    print 'Snapshotting the PG state...'
-
-    while True:
-        line = p_jq.stdout.readline()
-        if line == '' and p_jq.poll() != None:
-            break
+    if len(up) == 0:
         try:
-            k, v = line[0:-1].split('_')
-        except:
-            continue
-        if k == 'u' and v != 'null':
-            up[pgid].append(v)
-        elif k == 'p':
-            pgid = v
-            up[pgid] = []
+           check_call("ceph osd dump | grep 'require_min_compat_client luminous'", shell=True, stdout=PIPE)
+        except CalledProcessError:
+           print 'This tool uses upmap, which requires having the setting "require_min_compat_client luminous"'
+           sys.exit(1)
 
-    p_ceph.wait()
-    p_jq.wait()
+        p_ceph = Popen(cmd_ceph, stdout=PIPE)
+        p_jq = Popen(cmd_jq, stdin=p_ceph.stdout, stdout=PIPE)
+
+        print 'Snapshotting the PG state...'
+
+        while True:
+            line = p_jq.stdout.readline()
+            if line == '' and p_jq.poll() != None:
+                break
+            try:
+                k, v = line[0:-1].split('_')
+            except:
+                continue
+            if k == 'u' and v != 'null':
+                up[pgid].append(v)
+            elif k == 'p':
+                pgid = v
+                up[pgid] = []
+
+        p_ceph.wait()
+        p_jq.wait()
+
+        print 'Saving pg state in ./state.json'
+        json.dump(up, open('./state.json', 'w'))
+
     try:
         check_call('ceph osd set norebalance'.split())
         check_call('ceph osd set norecover'.split())
@@ -74,16 +85,16 @@ if __name__ == '__main__':
             if v != 'null':
                 index = index + 1
                 if up[pgid][index] != v:
-                    pgmiss.add(pgid)
+                    upmap_items.setdefault(pgid, []).extend((up[pgid][index], v))
             else:
-                if pgid not in pgmiss:
-                    del up[pgid]
+                del up[pgid]
                 index = -1
         else:
             pgid = v
+    up.clear()
 
     pool = Pool(32)
-    for pg_id in pgmiss:
+    for pg_id in upmap_items:
         try:
             proc = pool.apply_async(upmap, (pg_id, up[pg_id]))
         except Exception as e:
