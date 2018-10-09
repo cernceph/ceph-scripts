@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     for pg in cephinfo.get_pg_stats():
         poolid = pg['pgid'].split('.')[0]
-        if not all and poolid not in options.pools:
+        if options.pools and poolid not in options.pools:
             continue
         for osd in pg['acting']:
             osds[osd] += 1
