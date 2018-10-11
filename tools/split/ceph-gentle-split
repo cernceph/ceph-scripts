@@ -131,7 +131,7 @@ def split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment
   if max_pgs_backfilling > 0:
     # check num pgs backfilling
     npgs = get_num_backfilling()
-    if npgs > max_pgs_backfilling:
+    if npgs >= max_pgs_backfilling:
       print "split: npgs backfilling is too high, trying again later"
       return
 
