@@ -120,13 +120,6 @@ def split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment
 
   print "split: splitting from %s to %s" % (current_pg_num, goal)
 
-  if max_pgs_backfilling > 0:
-    # check num pgs backfilling
-    npgs = get_num_backfilling()
-    if npgs > max_pgs_backfilling:
-      print "split: npgs backfilling is too high, trying again later"
-      return
-
   # check timeframe
   current_time = datetime.datetime.now().time()
   current_day = datetime.datetime.now().weekday()
@@ -134,6 +127,13 @@ def split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment
   if not time_ok:
     print "current time: not within range %s - %s, trying again later" % (start_time, end_time)
     return
+
+  if max_pgs_backfilling > 0:
+    # check num pgs backfilling
+    npgs = get_num_backfilling()
+    if npgs > max_pgs_backfilling:
+      print "split: npgs backfilling is too high, trying again later"
+      return
 
   if max_latency > 0:
     # check the latency
@@ -165,9 +165,10 @@ def main(argv):
   end_time = "09:00"
   allowed_days = []
   really = False
+  delay = 60
 
   try:
-    opts, args = getopt.getopt(argv,"hp:t:l:b:s:g:i:a:e:r",["pool=","test_pool=","latency=","backfills=","increment=","goal=","allowed_days=","start_time=","end_time=","really"])
+    opts, args = getopt.getopt(argv,"hp:t:l:b:s:g:i:a:e:r:d",["pool=","test_pool=","latency=","backfills=","increment=","goal=","allowed_days=","start_time=","end_time=","really","delay="])
   except getopt.GetoptError:
     usage(2)
   for opt, arg in opts:
@@ -193,6 +194,8 @@ def main(argv):
       allowed_days = arg.split(',')
     elif opt in ("-r", "--really"):
       really = True
+    elif opt in ("-d", "--delay"):
+      delay = int(arg)
   if not pool or goal < 1:
     usage(2)
 
@@ -210,11 +213,12 @@ def main(argv):
   print 'Start time:', start_time
   print 'End time:', end_time
   print 'Allowed days:', allowed_days
+  print 'Delay:', delay
 
   while(True):
     split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment, start_time, end_time, allowed_days, really)
-    print "main: sleeping 60s"
-    time.sleep(60)
+    print "main: sleeping %s seconds" % delay
+    time.sleep(delay)
 
 if __name__ == "__main__":
   main(sys.argv[1:])
