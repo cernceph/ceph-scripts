@@ -1,8 +1,9 @@
 #!/bin/bash
 
-lvols=$((100/24))
+[ -z "$DISKS" ] && DISKS=48
+lvols=$((100*2/$DISKS))
 
-ls -l  /dev/sda[a-w] /dev/sd[b-z] | awk '{ print $10 }' | \
+ls -l $@ | awk '{ print $10 }' | \
 while read d1; read d2; do
         echo ceph-volume lvm zap $d1
         echo ceph-volume lvm zap $d2
@@ -14,4 +15,3 @@ while read d1; read d2; do
         echo lvcreate -l $lvols%VG -n $cname cephrocks
         echo ceph-volume lvm create --bluestore --data $vgname/$lvname --block.db cephrocks/$cname #--block.wal cephrocks/$cname
 done
-
