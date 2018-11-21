@@ -6,14 +6,14 @@ import sys
 
 all = False
 if len(sys.argv) > 1:
-  pool = sys.argv[1]
-  if pool == 'all':
-    all = True
-  else:
-    pools = pool.split(',')
+    pool = sys.argv[1]
+    if pool == 'all':
+        all = True
+    else:
+        pools = pool.split(',')
 else:
-  print "Usage: ceph-pool-pg-distribution <pool number>[,<pool num>]"
-  sys.exit(1)
+    print "Usage: ceph-pool-pg-distribution <pool id>[,<pool id>]"
+    sys.exit(1)
 
 print "Searching for PGs in pools: %s" % pools
 cephinfo.init_pg()
@@ -21,16 +21,16 @@ osds_d = defaultdict(int)
 total_pgs = 0
 
 for pg in cephinfo.get_pg_stats():
-  poolnum = pg['pgid'].split('.')[0]
-  if not all and poolnum not in pools:
-    continue
-  total_pgs += 1
-  for osd in pg['acting']:
-    osds_d[osd] += 1
+    poolnum = pg['pgid'].split('.')[0]
+    if not all and poolnum not in pools:
+        continue
+    total_pgs += 1
+    for osd in pg['acting']:
+        osds_d[osd] += 1
 
 total_osds = len(osds_d.keys())
 
-print "Summary:",total_pgs,"pgs on",total_osds,"osds"
+print "Summary:", total_pgs, "pgs on", total_osds, "osds"
 print
 print "Num OSDs with X PGs:"
 
@@ -39,4 +39,4 @@ for value in osds_d.values():
     count_d[value] += 1
 
 for k in sorted(count_d.keys()):
-    print "%d:" % k, count_d[k]
+    print "%3d:" % k, count_d[k]
