@@ -11,6 +11,62 @@ import getopt
 import commands
 import json
 import time
+import subprocess
+
+
+def pool_exists(pool):
+    cmd = ["ceph", "osd", "pool", "stats", pool]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    return True if proc.returncode == 0 else False
+
+
+def create_pool(pool):
+    cmd = ["ceph", "osd", "pool", "create", pool, "100", "100"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    if proc.returncode != 0:
+        raise Exception(stderr)
+
+
+def delete_pool(pool):
+    """
+    Delete a pool is dangerous, so the operation is disable by Ceph in default.
+    In that case, this function is expected to fail, you need to delete the
+    pool manually if you really mean it:
+
+    $ ceph osd pool delete <pool> <pool> --yes-i-really-really-mean-it
+    """
+    cmd = ["ceph", "osd", "pool", "delete", pool]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    if proc.returncode != 0:
+        raise Exception(stderr)
+
+
+def prepare(bench_pool):
+    print("prepare draining")
+
+    if pool_exists(bench_pool):
+        print("pool %s already exists" % bench_pool)
+        return
+
+    print("create benchmark pool %s to measure latency" % bench_pool)
+    create_pool(bench_pool)
+
+
+def cleanup(bench_pool):
+    print("cleaning up")
+
+    if pool_exists(bench_pool):
+        # delete a pool is disabled by Ceph in default
+        try:
+            delete_pool(bench_pool)
+        except Exception as e:
+            print("delete pool %s failed: %s" % (bench_pool, e))
+            print("You need to manually detele the pool %s" % bench_pool)
+
+    print("cleanup done")
 
 
 def update_osd_tree():
@@ -32,12 +88,13 @@ def get_crush_weight(osd):
     raise Exception('Undefined crush_weight for %s' % osd)
 
 
-def measure_latency():
+def measure_latency(pool):
     print "measure_latency: measuring 4kB write latency"
     latency = commands.getoutput(
-        "rados -p test bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'")
+        "rados -p %s bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'" %
+     pool)
     latency_ms = 1000*float(latency)
-    print "measure_latency: current latency is %s" % latency_ms
+    print "measure_latency: current latency is %s ms" % latency_ms
     return latency_ms
 
 
@@ -56,7 +113,7 @@ def crush_reweight(osd, weight):
     print "crush_reweight: %s" % out
 
 
-def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight):
+def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight, bench_pool):
 
     # check if there is any work to do:
     update_osd_tree()
@@ -66,6 +123,7 @@ def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight):
 
     if total_weight == 0:
         print "drain: no work to do, exiting"
+        cleanup(bench_pool)
         sys.exit(0)
 
     print "drain: draining total weight %s" % total_weight
@@ -77,7 +135,7 @@ def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight):
         return
 
     # check the latency
-    latency = measure_latency()
+    latency = measure_latency(bench_pool)
     if latency > max_latency:
         print "drain: latency is too high, trying again later"
         return
@@ -101,6 +159,7 @@ def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight):
 
     if total_delta_weight == 0:
         print "All done"
+        cleanup(bench_pool)
         sys.exit(0)
 
 
@@ -114,6 +173,7 @@ def main(argv):
     max_latency = 50
     max_pgs_backfilling = 20
     max_delta_weight = 2
+    bench_pool = "ceph-gentle-drain"
 
     try:
         opts, args = getopt.getopt(
@@ -137,13 +197,17 @@ def main(argv):
     if not drain_osds:
         usage(2)
 
-    print 'Draining OSDs: ', drain_osds
-    print 'Max latency (ms): ', max_latency
-    print 'Max PGs backfilling: ', max_pgs_backfilling
-    print 'Max delta weight:', max_delta_weight
+    print('Draining OSDs: %s' % drain_osds)
+    print('Max latency (ms): %d' % max_latency)
+    print('Max PGs backfilling: %d' % max_pgs_backfilling)
+    print('Max delta weight: %f' % max_delta_weight)
+    print('Benchmark pool: %s' % bench_pool)
+
+    prepare(bench_pool)
 
     while(True):
-        drain(drain_osds, max_pgs_backfilling, max_latency, max_delta_weight)
+        drain(drain_osds, max_pgs_backfilling, max_latency, max_delta_weight,
+              bench_pool)
         print "main: sleeping 60s"
         time.sleep(60)
 
