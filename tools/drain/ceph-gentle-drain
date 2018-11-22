@@ -164,7 +164,19 @@ def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight, bench_pool):
 
 
 def usage(code=0):
-    print 'ceph-gentle-drain -o <osd>[,<osd>,...] [-l <max_latency (default=50)>] [-b <max pgs backfilling (default=20)>] [-w <max incremental weight (default=2)>]'
+    print(
+        """ceph-gentle-drain [OPTIONS]
+
+        OPTIONS
+        -o/--osds <osd>[,<osd>,...]    Comma separated OSDs to drain
+        -l/--latency <N>               Max lantency ms, default 50
+        -b/--backfills <N>             Max PGs backfilling, default 20
+        -w/--weight <N>                Max incremental weight, default 2
+        --bench-pool <POOL>            Pool used to measure latency, default 'test'
+
+        Example:
+        ceph-gentle-drain -o osd.0
+        """)
     sys.exit(code)
 
 
@@ -173,13 +185,13 @@ def main(argv):
     max_latency = 50
     max_pgs_backfilling = 20
     max_delta_weight = 2
-    bench_pool = "ceph-gentle-drain"
+    bench_pool = "test"
 
     try:
         opts, args = getopt.getopt(
             argv,
             "ho:l:b:w:",
-            ["osds=", "latency=", "backfills=", "weight="])
+            ["osds=", "latency=", "backfills=", "weight=", "bench-pool="])
     except getopt.GetoptError:
         usage(2)
 
@@ -194,14 +206,21 @@ def main(argv):
             max_pgs_backfilling = int(arg)
         elif opt in ("-w", "--weight"):
             max_delta_weight = float(arg)
+        elif opt in ("--bench-pool"):
+            bench_pool = arg
+        else:
+            print("unknow option: %s" % opt)
+
     if not drain_osds:
         usage(2)
 
-    print('Draining OSDs: %s' % drain_osds)
+    print('==============================================================')
+    print('OSDs to drain: %s' % drain_osds)
     print('Max latency (ms): %d' % max_latency)
     print('Max PGs backfilling: %d' % max_pgs_backfilling)
     print('Max delta weight: %f' % max_delta_weight)
     print('Benchmark pool: %s' % bench_pool)
+    print('==============================================================')
 
     prepare(bench_pool)
 
