@@ -40,11 +40,14 @@ def get_pgp_num(pool_name):
   raise Exception('Undefined pgp_num for %s' % pool_name)
 
 def in_timeframe(start_time, end_time, current_time, allowed_days, current_day):
-  print current_time.strftime('check current time: %H:%M:%S')
   print "check current day: %s" % (current_day)
-  if current_day in allowed_days:
-    time_ok = True
-  elif start_time < end_time:
+
+  if current_day not in allowed_days:
+    print '%s not in allowed_days %s' % (current_day, allowed_days)
+    return False
+
+  print current_time.strftime('check current time: %H:%M:%S')
+  if start_time < end_time:
     if current_time >= start_time and current_time <= end_time:
       time_ok = True
     else:
@@ -53,6 +56,7 @@ def in_timeframe(start_time, end_time, current_time, allowed_days, current_day):
     time_ok = True
   else:
     time_ok = False
+
   return time_ok
 
 def measure_latency(test_pool):
@@ -125,7 +129,7 @@ def split(pool, test_pool, goal, max_pgs_backfilling, max_latency, max_increment
   current_day = datetime.datetime.now().weekday()
   time_ok = in_timeframe(start_time, end_time, current_time, allowed_days, current_day)
   if not time_ok:
-    print "current time: not within range %s - %s, trying again later" % (start_time, end_time)
+    print 'current datetime not within valid range, trying again later'
     return
 
   if max_pgs_backfilling > 0:
@@ -163,7 +167,7 @@ def main(argv):
   goal = 0
   start_time = "02:00"
   end_time = "09:00"
-  allowed_days = []
+  allowed_days = [0,1,2,3,4,5,6]
   really = False
   delay = 60
 
