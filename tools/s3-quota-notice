@@ -1,6 +1,6 @@
 #!/bin/sh
 
-radosgw-admin user list | jq -rM .[] | while read user;
+radosgw-admin user list | jq -r -M .[] | while read user;
 do
 	bytes_quota=`radosgw-admin user info --uid=$user | jq 'select(.user_quota.enabled==true)|.user_quota.max_size'`
 	bytes_used=`radosgw-admin user stats --uid=$user 2>/dev/null | jq .stats.total_bytes`
@@ -24,7 +24,7 @@ do
 			let quota/=1024
 			if (( quota < 1024 )); then break; fi
 		done
-		email=`radosgw-admin user info --uid=$user | jq -Mr .email`
+		email=`radosgw-admin user info --uid=$user | jq -M -r .email`
 		echo -e  "Hello user $user,\n\nYour S3 usage has reached $percent% of your quota ($quota$unit).\n\n\nRegards,\nCern S3 service team" | mail -s "Cern S3 Storage quota notice" $email 
 	fi	
 done

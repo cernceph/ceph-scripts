@@ -5,10 +5,14 @@
 # Small silent script that exits 0 if the current machine is a ceph-mon leader
 # and exits non-zero otherwise.
 
+# jq supports -e option since 1.4
+JQ_OPT=""
+[ $(jq --version 2>&1 | awk '{print $3 >= "1.4"}') = "1" ] && JQ_OPT="-e "
+
 HOSTNAME=$(hostname -s)
 if [ -e /var/run/ceph/ceph-mon.${HOSTNAME}.asok ]
 then
-    ceph daemon mon.${HOSTNAME} mon_status 2>/dev/null | jq -e '.state == "leader"' &> /dev/null
+    ceph daemon mon.${HOSTNAME} mon_status 2>/dev/null | jq $JQ_OPT '.state == "leader"' &> /dev/null
     exit $?
 else
     exit 1
