@@ -69,11 +69,18 @@ def rm_upmap_pg_items(pgid):
 
 # start here
 
-# exit if any PGs are degraded
-degraded = int(commands.getoutput('ceph pg ls degraded | wc -l'))
-if degraded > 0:
-  eprint("Refusing to run while %d PGs are degraded" % degraded)
+# discover degraded pgs (we won't upmap any degraded pgs)
+try:
+  degraded_json = commands.getoutput('ceph pg ls degraded -f json')
+  degraded = json.loads(degraded_json)
+except ValueError:
+  eprint('Error loading degraded pgs')
   sys.exit(1)
+
+# save their pgids for later
+degraded_pgids = []
+for pg in degraded:
+  degraded_pgids.append(pg['pgid'])
 
 # discover remapped pgs
 try:
@@ -108,6 +115,11 @@ for pg in upmaps:
 # handle each remapped pg
 for pg in remapped:
   pgid = pg['pgid']
+
+  # skip the degraded pgs
+  if pgid in degraded_pgids:
+    continue 
+  
   try:
     if has_upmap[pgid]:
       rm_upmap_pg_items(pgid)
