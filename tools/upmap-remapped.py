@@ -74,8 +74,7 @@ try:
   degraded_json = commands.getoutput('ceph pg ls degraded -f json')
   degraded = json.loads(degraded_json)
 except ValueError:
-  eprint('Error loading degraded pgs')
-  sys.exit(1)
+  degraded = []
 
 # save their pgids for later
 degraded_pgids = []
