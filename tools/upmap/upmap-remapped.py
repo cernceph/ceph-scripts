@@ -59,7 +59,7 @@ def gen_upmap_erasure(up, acting):
 
 def upmap_pg_items(pgid, mapping):
   print('ceph osd pg-upmap-items %s ' % pgid, end='')
-  for pair in mapping:
+  for pair in mapping[0:50]:
     print('%s %s ' % pair, end='')
   print('&')
 
