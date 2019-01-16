@@ -117,7 +117,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
     sys.exit(0)
 
 def usage(code=0):
-  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>] [-i <interval (default=60)>] [-s <start time (default=02:00)>] [-s <end time (defualt=09:00)>] [-a <day of week,[day of week,...]>]'
+  print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>] [-i <interval (default=60)>] [-s <start time (default=02:00)>] [-e <end time (defualt=09:00)>] [-a <day of week,[day of week,...]>]'
   sys.exit(code)
 
 def main(argv):
