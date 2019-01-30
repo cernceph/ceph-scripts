@@ -59,7 +59,7 @@ def gen_upmap_erasure(up, acting):
 
 def upmap_pg_items(pgid, mapping):
   print('ceph osd pg-upmap-items %s ' % pgid, end='')
-  for pair in mapping[0:50]:
+  for pair in mapping:
     print('%s %s ' % pair, end='')
   print('&')
 
@@ -112,7 +112,7 @@ for pg in upmaps:
    has_upmap[pgid] = True
 
 # handle each remapped pg
-for pg in remapped:
+for pg in remapped[0:50]:
   pgid = pg['pgid']
 
   # skip the degraded pgs
