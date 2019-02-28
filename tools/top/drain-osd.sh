@@ -26,6 +26,12 @@ do
         shift;
         ;;
 
+        --dev)
+        DEV=$2
+        shift;
+        shift;
+        ;;
+
         *)
         shift;
         ;;
@@ -39,8 +45,6 @@ function draw(){
     fi
 }
 
-
-draw "Investigating OSD $OSD"
 draw "Checking ceph health"
 draw $INITSTATE
 
@@ -65,6 +69,16 @@ then
     BLUESTORE=1
 fi
 
-ceph-disk list | grep "$OSD"
-lvs -o +devices,tags | grep "$OSD" | grep -oE "/dev/sd[a-z]?[a-z]"
+#IF osd is undefined
+OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
+draw "$DEV is osd.$OSD"
 
+if [[ `ceph osd ok-to-stop osd.$OSD &> /dev/null` -eq 0 ]];
+then
+    echo "ceph ok-to-stop osd.$OSD;"
+    echo "systemctl stop ceph.$OSD;"
+    echo "ceph osd out osd.$OSD;"
+fi
+
+
+ 
