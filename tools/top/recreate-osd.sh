@@ -54,8 +54,7 @@ function draw(){
 
 if [[ -z $OSD ]];
 then
-    draw "no OSD provided"
-    exit
+    draw "no OSD provided, will autodetermine later on"
 fi
 
 draw "Checking ceph health"
@@ -76,6 +75,13 @@ else
 fi
 
 
+
+if [[ -z $OSD ]];
+then
+    #autodetermine OSD
+    OSD=`ceph osd tree down | awk 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0} if($0 ~ /RJ55/) {out=1}; } ' | head -n 2 | tail -n 1 | grep -Eo "osd.[0-9]+" | tr -d "[osd\.]"`
+fi
+
 echo "ceph-volume lvm zap $DEV"
 echo "ceph osd destroy $OSD"
 
@@ -94,3 +100,4 @@ fi
 # Auto find unused journal partition and adapt ceph-volume lvm create accordingly
 
  
+#  awk 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0} if($0 ~ /RJ55/) {out=1}; } '
