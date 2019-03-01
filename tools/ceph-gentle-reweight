@@ -110,6 +110,7 @@ def reweight_osds(osds, max_pgs_backfilling, max_latency, delta_weight, target_w
       new_weight = max(max(weight + delta_weight, target_weight), 0)
     print "reweight_osds: %s new weight will be %s" % (osd, new_weight)
     crush_reweight(osd, new_weight, really)
+    time.sleep(30)
     changed = True
 
   if not changed:
