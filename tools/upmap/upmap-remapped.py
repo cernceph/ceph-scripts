@@ -112,7 +112,11 @@ for pg in upmaps:
    has_upmap[pgid] = True
 
 # handle each remapped pg
-for pg in remapped[0:50]:
+num_changed = 0
+for pg in remapped:
+  if num_changed >= 50:
+    break
+
   pgid = pg['pgid']
 
   # skip the degraded pgs
@@ -122,6 +126,7 @@ for pg in remapped[0:50]:
   try:
     if has_upmap[pgid]:
       rm_upmap_pg_items(pgid)
+      num_changed += 1
       continue
   except KeyError:
     pass
@@ -136,3 +141,4 @@ for pg in remapped[0:50]:
     eprint('Unknown pool type for %s' % pool)
     sys.exit(1)
   upmap_pg_items(pgid, pairs)
+  num_changed += 1
