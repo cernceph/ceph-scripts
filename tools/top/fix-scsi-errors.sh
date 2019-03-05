@@ -89,6 +89,7 @@ then
   fi
   #IF MOUNT/CEPH-DISK LIST/LVS say its ok
   #then
+    echo "dd if=/dev/zero of=$DEV bs=1M"
     echo "smartctl -t long $DEV"
   #fi
 else
