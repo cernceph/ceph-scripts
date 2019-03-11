@@ -83,7 +83,7 @@ then
 fi
 
 echo "ceph-volume lvm zap $DEV"
-echo "ceph osd destroy $OSD"
+echo "ceph osd destroy $OSD --yes-i-really-mean-it"
 
 if [[ -z $DBD ]];
 then 
