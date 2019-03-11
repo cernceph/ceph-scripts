@@ -62,16 +62,6 @@ then
   exit 1
 fi
 
-hdd_num=`wc -l < $osd_file`
-let "partitions_per_ssd=($hdd_num+$ssd_num-1)/$ssd_num" #ceil(hdd_num/ssd_num)
-
-if [[ $partitions_per_ssd == 1 ]]; then
-  echo "Machine has no journals"
-  exit 1
-fi
-
-let "ssd_partition_size=100/$partitions_per_ssd"
-
 out_and_destroy()
 {
   osd_id=$1
