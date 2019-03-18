@@ -23,9 +23,15 @@ set -x
 
 yes 'will cite' | parallel --bibtex > /dev/null 2>&1
 
+jobs=4
 if [[ ! -z $1 ]];
 then
-  osd_file=$1
+  jobs=$1
+fi
+
+if [[ ! -z $2 ]];
+then
+  osd_file=$2
 else
   osd_file=`mktemp --suffix=_osd_list`
 
@@ -91,6 +97,7 @@ create_new_osd()
     return 1
   fi
 
+  ceph-volume lvm zap $osd_block || exit 1
   ceph-volume lvm create --bluestore --osd-id $osd_id --data $hdd_block --block.db $ssd_block || exit 1
   ceph osd in $osd_id || exit 1
 }
@@ -98,7 +105,7 @@ export -f create_new_osd
 
 for ssd in ${ssds[*]};
 do
-  grep $ssd $osd_file | parallel -C '\t' out_and_destroy
+  grep $ssd $osd_file | parallel -j $jobs -C '\t' out_and_destroy
 
   next=true
   cut -f1 < $osd_file | while read a; do
