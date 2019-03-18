@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 
+if [[ ! -z $1 && $1 =~ ^[0-9]+$ ]]; then
+  echo "Using $1 jobs"
+  if [[ ! -z $2 ]]; then
+    echo "Using $2 as osd list file"
+  else
+    echo "Osd list file will be generated"
+  fi
+else
+  echo "Using $1 as osd list file"
+fi
+
+
 echo "This host's filestore osds created by ceph-disk will be erased from the " \
      "cluster. New ones will be made with the bluestore format using ceph-volume"
 read -p "Are you sure you want to proceed? (y/n): " -r
@@ -24,14 +36,15 @@ set -x
 yes 'will cite' | parallel --bibtex > /dev/null 2>&1
 
 jobs=4
-if [[ ! -z $1 ]];
+if [[ ! -z $1 && $1 =~ ^[0-9]+$ ]];
 then
   jobs=$1
+  shift
 fi
 
-if [[ ! -z $2 ]];
+if [[ ! -z $1 ]];
 then
-  osd_file=$2
+  osd_file=$1
 else
   osd_file=`mktemp --suffix=_osd_list`
 
@@ -49,16 +62,6 @@ then
   exit 1
 fi
 
-hdd_num=`wc -l < $osd_file`
-let "partitions_per_ssd=($hdd_num+$ssd_num-1)/$ssd_num" #ceil(hdd_num/ssd_num)
-
-if [[ $partitions_per_ssd == 1 ]]; then
-  echo "Machine has no journals"
-  exit 1
-fi
-
-let "ssd_partition_size=100/$partitions_per_ssd"
-
 out_and_destroy()
 {
   osd_id=$1
@@ -74,34 +77,18 @@ out_and_destroy()
     while ! ceph osd safe-to-destroy $osd_id; do sleep 10 ; done
     systemctl stop ceph-osd@$osd_id
 
-    sleep 5
+    sleep 2
 
     if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
     then
-      umount /var/lib/ceph/osd/ceph-$osd_id || exit 1
+      umount -l /var/lib/ceph/osd/ceph-$osd_id || exit 1
     fi
 
     ceph osd destroy $osd_id --yes-i-really-mean-it || exit 1
-    ceph-volume lvm zap $osd_block || exit 1
+    ceph-disk zap $osd_block || exit 1
   fi
 }
 export -f out_and_destroy
-
-create_new_osd()
-{
-  osd_id=$1
-  hdd_block=$2
-  ssd_block=$4
-
-  if [[ -z $osd_id  ]]; then
-    return 1
-  fi
-
-  ceph-volume lvm zap $osd_block || exit 1
-  ceph-volume lvm create --bluestore --osd-id $osd_id --data $hdd_block --block.db $ssd_block || exit 1
-  ceph osd in $osd_id || exit 1
-}
-export -f create_new_osd
 
 for ssd in ${ssds[*]};
 do
@@ -116,13 +103,6 @@ do
     fi
   done
   if [[ $next == false ]]; then continue; fi
-  dd if=/dev/zero of=$ssd bs=512 count=1
-  parted -s $ssd mklabel gpt
-  for i in `seq 0 $(($partitions_per_ssd-1))`;
-  do
-    parted -s -a optimal $ssd mkpart primary \
-                      "$((i*$ssd_partition_size))%" \
-                      "$(((i+1)*$ssd_partition_size))%"
-  done
-  parallel -C '\t' --xapply create_new_osd :::: <(grep $ssd $osd_file) ::: `seq 1 $partitions_per_ssd | sed "s|^|$ssd|"`
+  ceph-volume lvm zap $ssd
+  ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'`
 done
