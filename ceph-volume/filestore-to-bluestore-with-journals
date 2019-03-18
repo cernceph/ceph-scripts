@@ -76,17 +76,16 @@ out_and_destroy()
     ceph osd out $osd_id
     while ! ceph osd safe-to-destroy $osd_id; do sleep 10 ; done
     systemctl stop ceph-osd@$osd_id
-    systemctl disable ceph-osd@$osd_id.service
 
-    sleep 5
+    sleep 2
 
     if mount | grep -qP "/var/lib/ceph/osd/ceph-$osd_id\b"
     then
-      umount /var/lib/ceph/osd/ceph-$osd_id || exit 1
+      umount -l /var/lib/ceph/osd/ceph-$osd_id || exit 1
     fi
 
     ceph osd destroy $osd_id --yes-i-really-mean-it || exit 1
-    ceph-volume lvm zap $osd_block || exit 1
+    ceph-disk zap $osd_block || exit 1
   fi
 }
 export -f out_and_destroy
