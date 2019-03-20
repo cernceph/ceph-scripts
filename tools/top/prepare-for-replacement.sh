@@ -79,10 +79,10 @@ fi
 
 draw "$DEV is osd.$OSD"
 
-if [[ `ceph osd ok-to-stop osd.$OSD &> /dev/null` -eq 0 ]];
+if [[ `ceph osd safe-to-destroy osd.$OSD &> /dev/null` -eq 0 ]];
 then
-  echo "systemctl stop ceph-osd@$OSD;"
-  echo "ceph osd out osd.$OSD;"
+  echo "umount /var/lib/ceph/osd/ceph-$OSD"
+  echo "ceph-volume lvm zap $DEV --destroy"
 fi
 
 
