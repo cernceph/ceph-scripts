@@ -114,9 +114,6 @@ for pg in upmaps:
 # handle each remapped pg
 num_changed = 0
 for pg in remapped:
-  if num_changed % 50 == 0:
-    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
-
   pgid = pg['pgid']
 
   # skip the degraded pgs
@@ -130,6 +127,10 @@ for pg in remapped:
       continue
   except KeyError:
     pass
+
+  if num_changed % 50 == 0:
+    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
+
   up = pg['up']
   acting = pg['acting']
   pool = pgid.split('.')[0]
