@@ -59,7 +59,7 @@ else
 fi
 
 
-if [[ ! `ceph-disk list | grep -q LVM2` -eq 0 ]];
+if [[ `ceph-disk list | grep -q LVM2` -eq 0 ]];
 then
   draw "Bluestore OSDs on the host"
   BLUESTORE=1
@@ -68,8 +68,10 @@ fi
 #IF osd is undefined
 if [[ $BLUESTORE -eq 1 ]];
 then
+  draw "Bluestore OSD"
   OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
 else
+  draw "Filestore OSD"
   OSD=`ceph-disk list | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
 fi
 draw "$DEV is osd.$OSD"
