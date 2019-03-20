@@ -128,7 +128,7 @@ for pg in remapped:
   except KeyError:
     pass
 
-  if num_changed % 50 == 0:
+  if (num_changed + 1) % 50 == 0:
     print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
 
   up = pg['up']
