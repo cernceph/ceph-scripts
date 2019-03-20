@@ -114,8 +114,8 @@ for pg in upmaps:
 # handle each remapped pg
 num_changed = 0
 for pg in remapped:
-  if num_changed >= 50:
-    break
+  if num_changed % 50 == 0:
+    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
 
   pgid = pg['pgid']
 
@@ -142,3 +142,5 @@ for pg in remapped:
     sys.exit(1)
   upmap_pg_items(pgid, pairs)
   num_changed += 1
+
+print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
