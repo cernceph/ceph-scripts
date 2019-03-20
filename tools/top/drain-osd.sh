@@ -20,12 +20,6 @@ do
     VERBOSE=1;   
     ;; 
 
-    --osd)
-    OSD=$2
-    shift;
-    shift;
-    ;;
-
     --dev)
     DEV=$2
     shift;
@@ -45,17 +39,21 @@ function draw(){
   fi
 }
 
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 0 ]]; 
+if [[ -z $DEV ]];
+then
+  draw "no drive"
+  exit
+fi
+
+if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
 then
   if [[ $FORCEMODE -eq 0 ]];
   then
-    echo "Ceph is unhealthy, aborting"
+    echo "Ceph is $INITSTATE, aborting"
     exit
   else
-    draw "Ceph is unhealthy"
+    draw "Ceph is $INITSTATE"
   fi
-else
-  draw "Ceph is healthy"
 fi
 
 
