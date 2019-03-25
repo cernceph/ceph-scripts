@@ -83,13 +83,11 @@ then
     OSD=`ceph osd tree down | awk -v awkhost=$AWKHOST 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0; out=0} if($0 ~ awkhost) {out=1}; }' | grep -Eo "osd\.[0-9]+" | tr -d "[a-z\.]"`
 fi
 
-echo "ceph-volume lvm zap $DEV"
-echo "ceph osd destroy $OSD --yes-i-really-mean-it"
-
 if [[ -z $DBD ]];
 then 
   for i in `ceph-disk list | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
   do 
+    draw "investigating $i"
     lvs -o +devices,tags | grep -q $i; 
     if [[ $? -eq 1 ]];
     then 
@@ -97,8 +95,16 @@ then
       DBD=$i;
     fi;
   done
+  if [[ -z $DBD ]];
+  then
+    draw "No block device found, switching to ceph-volume"
+    DBD=`ceph-volume lvm list | awk -v awkosdid=osd.$OSD 'BEGIN { out=0 } { if($0 ~ /====/) {out=0} if(out) {print $0;} if($0 ~ awkosdid) {out=1}; }'  | grep -Eo "db device.*$" | sed 's/db device.*\/dev\///';`
+  fi
 fi
 
+echo "ceph-volume lvm zap $DEV"
+echo "ceph-volume lvm zap /dev/$DBD"
+echo "ceph osd destroy $OSD --yes-i-really-mean-it"
 echo "ceph-volume lvm create --osd-id $OSD --data $DEV --block.db $DBD"
 
 
