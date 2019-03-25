@@ -61,7 +61,7 @@ draw "Checking ceph health"
 draw $INITSTATE
 
 
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 0 ]]; 
+if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
 then
     if [[ $FORCEMODE -eq 0 ]];
     then
