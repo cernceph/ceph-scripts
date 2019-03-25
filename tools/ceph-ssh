@@ -1,0 +1,5 @@
+#!/bin/bash
+
+: ${1?"Usage: $0 <osd.id>"}
+
+ssh `ceph osd find $1 | jq -r .ip | cut -d: -f1`
