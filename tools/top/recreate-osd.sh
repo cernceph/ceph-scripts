@@ -79,7 +79,8 @@ fi
 if [[ -z $OSD ]];
 then
     #autodetermine OSD
-    OSD=`ceph osd tree down | awk 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0} if($0 ~ /RJ55/) {out=1}; } ' | head -n 2 | tail -n 1 | grep -Eo "osd.[0-9]+" | tr -d "[osd\.]"`
+    AWKHOST=`echo $HOSTNAME | grep -oE "[a-z][0-9]+[a-z][0-9]+"`
+    OSD=`ceph osd tree down | awk -v awkhost=$AWKHOST 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0} if($0 ~ awkhost) {out=1}; }' | grep -Eo "osd\.[0-9]+" | tr -d "[a-z\.]"`
 fi
 
 echo "ceph-volume lvm zap $DEV"
@@ -87,17 +88,26 @@ echo "ceph osd destroy $OSD --yes-i-really-mean-it"
 
 if [[ -z $DBD ]];
 then 
-    echo "ceph-volume lvm create --osd-id $OSD --data $DEV"
-else
-    echo "ceph-volume lvm create --osd-id $OSD --data $DEV --block.db $DBD"
+  for i in `ceph-disk list | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
+  do 
+    lvs -o +devices,tags | grep -q $i; 
+    if [[ $? -eq 1 ]];
+    then 
+      draw "$i can be used";
+      DBD=$i;
+    fi;
+  done
 fi
+
+echo "ceph-volume lvm create --osd-id $OSD --data $DEV --block.db $DBD"
+
+
 
 
 ## TODO
 #
 # Auto discover osd to be replaced (grep on ceph osd tree down to find down osd on the host)
 # Auto find if 2-disk OSDs are used
-# Auto find unused journal partition and adapt ceph-volume lvm create accordingly
 
  
 #  awk 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0} if($0 ~ /RJ55/) {out=1}; } '
