@@ -104,5 +104,5 @@ do
   done
   if [[ $next == false ]]; then continue; fi
   ceph-volume lvm zap $ssd
-  ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'`
+  ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'` --osd-ids `grep $ssd $osd_file | awk '{print $1}'`
 done

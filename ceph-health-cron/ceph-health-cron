@@ -15,6 +15,11 @@
 # Example:
 # ./ceph-health-cron 5 <0|1|2|3|4>
 
+if [[ $(roger show `hostname -s` | jq '.[0]["app_alarmed"]') == false ]]
+then
+    exit 0
+fi
+
 if [[ $# -lt 2 ]]
 then
     echo "Usage: $0 <# monitors> <this mon id>"
@@ -37,11 +42,9 @@ then
     HEALTH="ceph health timed out (30s), potential loss of quorum!" #using $HEALTH since it wouldn't get initialized when it times out
 fi
 
-if [ "$HEALTH" != 'HEALTH_OK' ]
+if [ "$HEALTH" == 'HEALTH_OK' ]
 then
-    echo -n "Ceph is not healthy: "
-    echo "$HEALTH"
-    echo
+    exit 0
 fi
 
 # get logs for last hour
@@ -58,7 +61,7 @@ then
 fi
 
 # check for down osd's
-DOWNOSD=$(egrep 'out|down|fail|boot' /tmp/ceph.log.lasthour | grep -v pgmap)
+DOWNOSD=$(grep osd /tmp/ceph.log.lasthour | egrep 'out|down|fail|boot' | grep -v pgmap)
 if [ "$DOWNOSD" ]
 then
     echo Out/Down/Failed/Booted OSDs:
@@ -67,7 +70,7 @@ then
 fi
 
 # check for slow requests
-SLOW=$(grep slow /tmp/ceph.log.lasthour | grep oldest)
+SLOW=$(grep -i slow /tmp/ceph.log.lasthour | grep oldest)
 if [ "$SLOW" ]
 then
     echo Slow Requests:
