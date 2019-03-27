@@ -8,12 +8,13 @@
 # Contributors:
 #    Dan van der Ster (daniel.vanderster@cern.ch)
 #    Matthias Schoenberg (kontakt@ms-itd.de)
+#    Theofilos Mouratidis (t.mour@cern.ch)
 #
 # Usage:
 # ./ceph-health-cron <# mons> <mon id, starting with 0>
 #
 # Example:
-# ./ceph-health-cron 5 <0|1|2|3|4>
+# ./ceph-health-cron 5 <0|1|2|3|4> 10
 
 if [[ $(roger show `hostname -s` | jq '.[0]["app_alarmed"]') == false ]]
 then
@@ -34,6 +35,8 @@ if [ "$ID" != "$ROTA" ]
 then
     exit
 fi
+
+
 
 # check ceph health
 HEALTH=$(timeout 30 ceph health)
@@ -69,13 +72,16 @@ then
     echo
 fi
 
-# check for slow requests
+# check for slow requests, if on average more than $3 or 10, report
 SLOW=$(grep -i slow /tmp/ceph.log.lasthour | grep oldest)
 if [ "$SLOW" ]
 then
-    echo Slow Requests:
-    echo "$SLOW"
-    echo
+    if (( `grep -Po '[0-9]+(?= slow requests)' <<< $SLOW | jq -s 'add/length|floor'` > ${3:-10} ))
+    then
+        echo Slow Requests:
+        echo "$SLOW"
+        echo
+    fi
 fi
 
 # check for monitor elections
