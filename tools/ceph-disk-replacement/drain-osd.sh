@@ -79,10 +79,15 @@ fi
 
 draw "$DEV is osd.$OSD"
 
-if [[ `ceph osd ok-to-stop osd.$OSD &> /dev/null` -eq 0 ]];
+if [[ `systemctl is-active ceph-osd@1120 --quiet;` -eq 0 ]];
 then
-  echo "systemctl stop ceph-osd@$OSD;"
-  echo "ceph osd out osd.$OSD;"
+  draw "osd.$OSD is active"
+  if [[ `ceph osd ok-to-stop osd.$OSD &> /dev/null` -eq 0 ]];
+  then
+    echo "ceph osd out osd.$OSD;"
+  fi
+else
+  echo "# osd.$OSD is already out draining."
 fi
 
 
