@@ -1,0 +1,39 @@
+#!/bin/bash
+
+if [[ -z $1 ]]
+then
+    echo "Give the journal ssd path (/dev/sd..) as first argument."
+    exit 0
+fi
+
+echo "Do not run this unless you know what are you doing!!!"
+echo "Filestore to bluestore conversion"
+echo "Requires ceph-volume with --osd-ids argument"
+
+SSD=$1
+
+TMP=`mktemp`
+ceph-disk list | grep $1 > $TMP
+IDS=`grep -Po '(?<=osd\.)[0-9]+' $TMP`
+HDD=`grep -Po '/dev/sd[a-z]+(?=1 ceph data)' $TMP`
+rm -f $TMP
+
+echo $SSD
+echo $HDD | tr " " "\t"
+echo $IDS | sed "s/ /\t\t/g"
+
+read -p "Continue? (y/n): " REPLY
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    exit 0
+fi
+
+echo "$IDS" | xargs -n1 -I {} systemctl stop ceph-osd@{}
+echo "$IDS" | xargs -n1 -I {} ceph osd out {}
+echo "$IDS" | xargs -n1 -I {} ceph osd destroy {} --yes-i-really-mean-it
+echo "$IDS" | xargs -n1 -I {} umount /var/lib/ceph/osd/ceph-{}
+
+ls $HDD | xargs -n 1 -I {} ceph-disk zap {}
+ls $SSD $HDD | xargs -n 1 -I {} ceph-volume lvm zap {}
+
+ceph-volume lvm batch $SSD $HDD --osd-ids $IDS
