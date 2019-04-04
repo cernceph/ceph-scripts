@@ -102,12 +102,20 @@ then
   fi
 fi
 
+
+
 echo "ceph-volume lvm zap $DEV"
-echo "ceph-volume lvm zap /dev/$DBD"
-echo "ceph osd destroy $OSD --yes-i-really-mean-it"
-echo "ceph-volume lvm create --osd-id $OSD --data $DEV --block.db $DBD"
 
 
+if [[ -z $DBD ]];
+then 
+  echo "ceph osd destroy $OSD --yes-i-really-mean-it"
+  echo "ceph-volume lvm create --osd-id $OSD --data $DEV"
+else
+  echo "ceph-volume lvm zap /dev/$DBD"
+  echo "ceph osd destroy $OSD --yes-i-really-mean-it"
+  echo "ceph-volume lvm create --osd-id $OSD --data $DEV --block.db $DBD"
+fi
 
 
 ## TODO
