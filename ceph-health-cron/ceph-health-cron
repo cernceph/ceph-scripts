@@ -1,94 +1,88 @@
 #!/bin/bash
-# ceph-health-cron
-#
-# Reports the health of a ceph cluster.
-# Should be run hourly on all your ceph mons; but at most one
-# will email you each hour.
-#
-# Contributors:
-#    Dan van der Ster (daniel.vanderster@cern.ch)
-#    Matthias Schoenberg (kontakt@ms-itd.de)
-#    Theofilos Mouratidis (t.mour@cern.ch)
-#
-# Usage:
-# ./ceph-health-cron <# mons> <mon id, starting with 0>
-#
-# Example:
-# ./ceph-health-cron 5 <0|1|2|3|4> 10
 
-if [[ $(roger show `hostname -s` | jq '.[0]["app_alarmed"]') == false ]]
-then
-    exit 0
-fi
+# exit if not leader
+ceph-leader || exit
 
-if [[ $# -lt 2 ]]
-then
-    echo "Usage: $0 <# monitors> <this mon id>"
-    exit 0
-fi
-
-# rotate through the mons whose turn it is to run the health script
-NMONS=$1
-ID=$2
-ROTA=$(( $( date +%k ) % $NMONS ))
-if [ "$ID" != "$ROTA" ]
-then
-    exit
-fi
-
-
+HOSTGROUP=${1:-unknown hostgroup}
+HOSTNAME=`hostname -s`
 
 # check ceph health
-HEALTH=$(timeout 30 ceph health)
-if [ "$?" = 124 ] #timeout's exit code is 124 when the timeout is hit
+HEALTH=$(ceph health)
+ACTIONABLE_WARNINGS=$(ceph health detail | egrep 'backfill_toofull|incomplete')
+HEALTH_FILTERED=$(ceph health detail | egrep -v 'HEALTH_WARN|OBJECT_MISPLACED|PG_DEGRADED|backfilling|wait_backfill|backfill_wait|recover|noscrub|nodeep-scrub|failing to respond to cache pressure|noout|currently failed to')
+if [ "$HEALTH" != 'HEALTH_OK' ] && [ "$ACTIONABLE_WARNINGS" ]
 then
-    HEALTH="ceph health timed out (30s), potential loss of quorum!" #using $HEALTH since it wouldn't get initialized when it times out
+    echo Ceph is not healthy:
+    ceph status
+    echo
+    echo Note these PGs:
+    ceph health detail | egrep 'backfill_toofull|incomplete'
+    echo
+    slackpost ceph "@channel: ${HOSTGROUP} ${HEALTH}. (${HOSTNAME})."
+elif [ "$HEALTH" != 'HEALTH_OK' ] && [ "$HEALTH_FILTERED" ]
+then
+    echo Ceph is not healthy:
+    ceph status
+    echo
+    slackpost ceph "${HOSTGROUP} ${HEALTH}. (${HOSTNAME})."
 fi
 
-if [ "$HEALTH" == 'HEALTH_OK' ]
+# get logs for last interval
+rm -f /tmp/ceph.log.lastinterval
+for (( i = 15; i >= 0; i-- )) ; do
+    DATE=`date +'%Y-%m-%d %H:%M' -d "$i minutes ago"`
+    sed -n -e "/${DATE}/p" /var/log/ceph/ceph.log >> /tmp/ceph.log.lastinterval
+done
+
+# check for ERR log messages in the past interval
+ERRORS=$(grep ERR /tmp/ceph.log.lastinterval)
+if [ "$ERRORS" ]
 then
-    exit 0
+    echo Errors in ceph.log: $(grep ERR /tmp/ceph.log.lastinterval | wc -l)
+    echo
+    grep ERR /tmp/ceph.log.lastinterval
+    echo
 fi
 
-# get logs for last hour
-rm -f /tmp/ceph.log.lasthour
-awk -vTIME=`date -d'now-1 hours' +%H:%M:%S` ' { if ($2 > TIME) print $0}' /var/log/ceph/ceph.log >> /tmp/ceph.log.lasthour
-
-# check for WRN or DBG log messages in the past hour
-WARNINGS=$(grep -v INF /tmp/ceph.log.lasthour)
+# check for WRN or DBG log messages in the past interval
+FILTER='osdmap|fsmap|scrub ok|scrub starts|pgmap|failing to respond to cache pressure|striper.layout|rdlock|xlock|wrlock|setfilelockrule|noout|nodown|greedyspill.lua|Health check|overall HEALTH_WARN|slow request|evicting unresponsive client  '
+WARNINGS=$(grep -v INF /tmp/ceph.log.lastinterval | egrep -v "${FILTER}")
 if [ "$WARNINGS" ]
 then
-    echo -n "Warnings in ceph.log: "
-    echo "$WARNINGS"|wc -l
+    echo Warnings in ceph.log: $(grep -v INF /tmp/ceph.log.lastinterval | egrep -v "${FILTER}" | wc -l)
+    echo
+    grep -v INF /tmp/ceph.log.lastinterval | egrep -v "${FILTER}" | tail
     echo
 fi
 
 # check for down osd's
-DOWNOSD=$(grep osd /tmp/ceph.log.lasthour | egrep 'out|down|fail|boot' | grep -v pgmap)
+DOWNOSD=$(egrep 'out|down|fail|boot' /tmp/ceph.log.lastinterval | egrep -v "${FILTER}" | grep osd)
 if [ "$DOWNOSD" ]
 then
-    echo Out/Down/Failed/Booted OSDs:
-    echo "$DOWNOSD"
+    echo Out/Down/Failed OSDs:
+    egrep 'out|down|fail|boot' /tmp/ceph.log.lastinterval | egrep -v "${FILTER}" | grep osd | tail
     echo
 fi
 
-# check for slow requests, if on average more than $3 or 10, report
-SLOW=$(grep -i slow /tmp/ceph.log.lasthour | grep oldest)
+# check for slow requests, filter out based on the
+# number of requests (10) or blocked time (60sec)
+SLOW=$(grep slow /tmp/ceph.log.lastinterval | grep -v mds. | grep oldest)
 if [ "$SLOW" ]
 then
-    if (( `grep -Po '[0-9]+(?= slow requests)' <<< $SLOW | jq -s 'add/length|floor'` > ${3:-10} ))
+    if (( `cut -d ' ' -f 10 <<< "$SLOW" | jq -s 'add/length|floor'` > ${2:-10} )) ||
+       (( `cut -d ' ' -f 20 <<< "$SLOW" | sort -n | tail -1 | jq floor` > ${3:-60} ))
     then
         echo Slow Requests:
-        echo "$SLOW"
+        echo "$SLOW" | sort -n -k 10 | tail
         echo
     fi
 fi
 
 # check for monitor elections
-ELEC=$(grep election /tmp/ceph.log.lasthour)
+ELEC=$(grep election /tmp/ceph.log.lastinterval)
 if [ "$ELEC" ]
 then
     echo Monitor Elections:
-    echo "$ELEC"
+    grep election /tmp/ceph.log.lastinterval | tail
     echo
 fi
