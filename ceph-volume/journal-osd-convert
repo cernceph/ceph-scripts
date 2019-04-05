@@ -33,7 +33,7 @@ echo "$IDS" | xargs -n1 -I {} ceph osd out {}
 echo "$IDS" | xargs -n1 -I {} ceph osd destroy {} --yes-i-really-mean-it
 echo "$IDS" | xargs -n1 -I {} umount /var/lib/ceph/osd/ceph-{}
 
-ls $HDD | xargs -n 1 -I {} ceph-disk zap {}
+ls $HDD | xargs -n 1 -I {} wipefs -a {}
 ls $SSD $HDD | xargs -n 1 -I {} ceph-volume lvm zap {}
 
 ceph-volume lvm batch $SSD $HDD --osd-ids $IDS
