@@ -45,11 +45,13 @@ then
   exit
 fi
 
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
+echo $INITSTATE | grep -q "HEALTH_OK"
+if [[ $? -eq 1 ]]; 
 then
   if [[ $FORCEMODE -eq 0 ]];
   then
-    echo "Ceph is $INITSTATE, aborting"
+    echo "# Ceph is $INITSTATE, aborting"
+    echo "# Use -f to force execution"
     exit
   else
     draw "Ceph is $INITSTATE"
@@ -78,8 +80,10 @@ then
 fi 
 
 draw "$DEV is osd.$OSD"
+ceph osd safe-to-destroy osd.$OSD &> /dev/null
+retval=`echo $?`
 
-if [[ `ceph osd safe-to-destroy osd.$OSD &> /dev/null` -eq 0 ]];
+if [[ $retval -eq 0 ]];
 then
   echo "systemctl stop ceph-osd@$OSD"
   echo "umount /var/lib/ceph/osd/ceph-$OSD"
