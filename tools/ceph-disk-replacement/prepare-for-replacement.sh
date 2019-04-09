@@ -79,6 +79,15 @@ then
   exit;
 fi 
 
+# How many drives per OSD?
+NUM=`lvs -o +devices,tags | grep type=block | grep $OSD | grep -oE "/dev/.* " | grep  "dev/sd[a-z]*" -o | wc -l`
+if [[ $NUM -gt 1 ]];
+then
+  draw "osd.$OSD has $NUM drives"
+  echo "# Please note that the OSD was using the following drives: `lvs -o +devices,tags | grep type=block | grep  $OSD | grep -oE "/dev/.* " | sed 's/([0-9])//g'` "
+fi
+
+
 draw "$DEV is osd.$OSD"
 ceph osd safe-to-destroy osd.$OSD &> /dev/null
 retval=`echo $?`
