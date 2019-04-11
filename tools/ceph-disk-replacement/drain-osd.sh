@@ -45,11 +45,13 @@ then
   exit
 fi
 
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
+echo $INITSTATE | grep -q "HEALTH_OK"
+if [[ $? -eq 1 ]]; 
 then
   if [[ $FORCEMODE -eq 0 ]];
   then
-    echo "Ceph is $INITSTATE, aborting"
+    echo "# Ceph is $INITSTATE, aborting"
+    echo "# Use -f to force execution"
     exit
   else
     draw "Ceph is $INITSTATE"
@@ -57,7 +59,8 @@ then
 fi
 
 
-if [[ `ceph-disk list | grep -q LVM2` -eq 0 ]];
+
+if [[ `ceph-disk list 2>/dev/null | grep -q LVM2` -eq 0 ]];
 then
   draw "Bluestore OSDs on the host"
   BLUESTORE=1
@@ -68,7 +71,7 @@ if [[ $BLUESTORE -eq 1 ]];
 then
   OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
 else
-  OSD=`ceph-disk list | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
+  OSD=`ceph-disk list 2>/dev/null | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
 fi
 
 if [[ -z $OSD ]];
