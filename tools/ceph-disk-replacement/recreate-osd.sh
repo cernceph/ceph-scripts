@@ -85,7 +85,7 @@ fi
 
 if [[ -z $DBD ]];
 then 
-  for i in `ceph-disk list | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
+  for i in `ceph-disk list 2>/dev/null | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
   do 
     draw "investigating $i"
     lvs -o +devices,tags | grep -q $i; 
