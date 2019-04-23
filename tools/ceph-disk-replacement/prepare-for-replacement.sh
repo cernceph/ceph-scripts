@@ -41,7 +41,13 @@ function draw(){
 
 if [[ -z $DEV ]];
 then
-  draw "no drive"
+  echo "echo \"No drive passed\""
+  exit
+fi
+
+if [[ `echo $DEV | grep -Eo "/dev/sd[a-z][a-z]?" -c` -eq 0 ]];
+then
+  echo "echo \"Argument malformed, check spelling\""
   exit
 fi
 
@@ -50,26 +56,19 @@ if [[ $? -eq 1 ]];
 then
   if [[ $FORCEMODE -eq 0 ]];
   then
-    echo "# Ceph is $INITSTATE, aborting"
-    echo "# Use -f to force execution"
+    echo "echo \"Ceph is $INITSTATE, aborting\""
+    echo "echo \"Use -f to force execution\""
     exit
   else
     draw "Ceph is $INITSTATE"
   fi
 fi
 
+OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
 
-if [[ `ceph-disk list 2>/dev/null | grep -q LVM2` -eq 0 ]];
+if [[ -z $OSD ]];
 then
-  draw "Bluestore OSDs on the host"
-  BLUESTORE=1
-fi
-
-#IF osd is undefined
-if [[ $BLUESTORE -eq 1 ]];
-then
-  OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
-else
+  draw "# No bluestore osd found, going through ceph-disk for filestore osds."
   OSD=`ceph-disk list 2>/dev/null | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
 fi
 
@@ -84,7 +83,7 @@ NUM=`lvs -o +devices,tags | grep type=block | grep $OSD | grep -oE "/dev/.* " | 
 if [[ $NUM -gt 1 ]];
 then
   draw "osd.$OSD has $NUM drives"
-  echo "# Please note that the OSD was using the following drives: `lvs -o +devices,tags | grep type=block | grep  $OSD | grep -oE "/dev/.* " | sed 's/([0-9])//g'` "
+  echo "echo \"Please note that the OSD was using the following drives: `lvs -o +devices,tags | grep type=block | grep  $OSD | grep -oE "/dev/.* " | sed 's/([0-9])//g'` \""
 fi
 
 
@@ -97,6 +96,8 @@ then
   echo "systemctl stop ceph-osd@$OSD"
   echo "umount /var/lib/ceph/osd/ceph-$OSD"
   echo "ceph-volume lvm zap $DEV --destroy"
+else
+  echo "echo \"osd.$OSD still unsafe to destroy\"" 
 fi
 
 
