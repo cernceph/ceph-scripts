@@ -81,7 +81,7 @@ fi
 
 if [[ -z $OSD ]];
 then
-  draw "$DEV has no OSD mapped to it."
+  echo "echo \"$DEV has no OSD mapped to it.\""
   exit;
 fi 
 
