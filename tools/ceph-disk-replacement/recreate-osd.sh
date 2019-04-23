@@ -90,6 +90,12 @@ then
     OSD=`ceph osd tree down | awk -v awkhost=$AWKHOST 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0; out=0} if($0 ~ awkhost) {out=1}; }' | grep -Eo "osd\.[0-9]+" | tr -d "[a-z\.]"`
 fi
 
+if [[ -z $OSD ]];
+then
+    echo "echo \"No down OSD found on this host. Contact ceph-admins.\""
+    exit
+fi
+
 if [[ -z $DBD ]];
 then 
   for i in `ceph-disk list 2>/dev/null | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
