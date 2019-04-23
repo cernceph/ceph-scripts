@@ -41,7 +41,7 @@ function draw(){
 
 if [[ -z $DEV ]];
 then
-  echo "echo \"no drive\""
+  echo "echo \"No drive passed\""
   exit
 fi
 
