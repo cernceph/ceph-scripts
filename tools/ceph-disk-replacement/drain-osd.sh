@@ -1,5 +1,11 @@
 #! /bin/bash
 
+if [[ `cat /etc/motd | grep hostgroup | grep -Eo "ceph/[a-Z0-9/]+" | grep -c castor` -eq 1 ]];
+then
+  echo "echo \"Castor nodes need special handling: contact ceph-admins\""
+  exit
+fi
+
 INITSTATE=`ceph health`
 FORCEMODE=0;
 VERBOSE=0
@@ -39,41 +45,44 @@ function draw(){
   fi
 }
 
+
+
 if [[ -z $DEV ]];
 then
-  draw "no drive"
+  echo "echo \"No drive passed\""
   exit
 fi
 
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
+if [[ `echo $DEV | grep -Eo "/dev/sd[a-z][a-z]?" -c` -eq 0 ]];
+then
+  echo "echo \"Argument malformed, check spelling\""
+  exit
+fi
+
+echo $INITSTATE | grep -q "HEALTH_OK"
+if [[ $? -eq 1 ]]; 
 then
   if [[ $FORCEMODE -eq 0 ]];
   then
-    echo "Ceph is $INITSTATE, aborting"
+    echo "echo \"Ceph is $INITSTATE, aborting\""
+    echo "echo \"Use -f to force execution\""
     exit
   else
-    draw "Ceph is $INITSTATE"
+    draw "# Ceph is $INITSTATE"
   fi
 fi
 
+OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
 
-if [[ `ceph-disk list | grep -q LVM2` -eq 0 ]];
+if [[ -z $OSD ]];
 then
-  draw "Bluestore OSDs on the host"
-  BLUESTORE=1
-fi
-
-#IF osd is undefined
-if [[ $BLUESTORE -eq 1 ]];
-then
-  OSD=`lvs -o +devices,tags | grep "$DEV" | grep -E "type=block" | grep -Eo "osd_id=[0-9]+" | tr -d "[a-z=_]"`
-else
-  OSD=`ceph-disk list | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
+  draw "# No bluestore osd found, going through ceph-disk for filestore osds."
+  OSD=`ceph-disk list 2>/dev/null | grep "^ $DEV" | grep -oE "osd\.[0-9]+" | tr -d "[osd\.]"`
 fi
 
 if [[ -z $OSD ]];
 then
-  draw "$DEV has no OSD mapped to it."
+  echo "echo \"$DEV has no OSD mapped to it.\""
   exit;
 fi 
 
@@ -87,7 +96,7 @@ then
     echo "ceph osd out osd.$OSD;"
   fi
 else
-  echo "# osd.$OSD is already out draining."
+  echo "echo \"osd.$OSD is already out draining.\""
 fi
 
 

@@ -1,5 +1,12 @@
 #! /bin/bash
 
+if [[ `cat /etc/motd | grep hostgroup | grep -Eo "ceph/[a-Z0-9/]+" | grep -c castor` -eq 1 ]];
+then
+  echo "echo \"Castor nodes need special handling: contact ceph-admins\""
+  exit
+fi
+
+
 INITSTATE=`ceph health`
 FORCEMODE=0;
 VERBOSE=0
@@ -51,41 +58,47 @@ function draw(){
     fi
 }
 
+if [[ -z $DEV ]];
+then
+  echo "echo \"No drive passed\""
+  exit
+fi
+
+if [[ `echo $DEV | grep -Eo "/dev/sd[a-z][a-z]?" -c` -eq 0 ]];
+then
+  echo "echo \"Argument malformed, check spelling\""
+  exit
+fi
+
+echo $INITSTATE | grep -q "HEALTH_OK"
+if [[ $? -eq 1 ]]; 
+then
+  if [[ $FORCEMODE -eq 0 ]];
+  then
+    echo "echo \"Ceph is $INITSTATE, aborting\""
+    echo "echo \"Use -f to force execution\""
+    exit
+  else
+    draw "# Ceph is $INITSTATE"
+  fi
+fi
+
 
 if [[ -z $OSD ]];
 then
-    draw "no OSD provided, will autodetermine later on"
-fi
-
-draw "Checking ceph health"
-draw $INITSTATE
-
-
-if [[ `echo $INITSTATE | grep -q "HEALTH_OK"` -eq 1 ]]; 
-then
-    if [[ $FORCEMODE -eq 0 ]];
-    then
-        draw "Ceph is unhealthy, aborting"
-        exit
-    else
-        draw "Ceph is unhealthy"
-    fi
-else
-    draw "Ceph is healthy"
-fi
-
-
-
-if [[ -z $OSD ]];
-then
-    #autodetermine OSD
     AWKHOST=`echo $HOSTNAME | sed 's/.cern.ch//'`
     OSD=`ceph osd tree down | awk -v awkhost=$AWKHOST 'BEGIN { out=0 } { if($0 ~ /rack/) {out=0} if(out) {print $0; out=0} if($0 ~ awkhost) {out=1}; }' | grep -Eo "osd\.[0-9]+" | tr -d "[a-z\.]"`
 fi
 
+if [[ -z $OSD ]];
+then
+    echo "echo \"No down OSD found on this host. Contact ceph-admins.\""
+    exit
+fi
+
 if [[ -z $DBD ]];
 then 
-  for i in `ceph-disk list | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
+  for i in `ceph-disk list 2>/dev/null | grep -E "ceph journal"  | grep -vE "for" | grep -oE "/dev/sd[a-z]+[0-9]"`;
   do 
     draw "investigating $i"
     lvs -o +devices,tags | grep -q $i; 
@@ -101,7 +114,6 @@ then
     DBD=`ceph-volume lvm list | awk -v awkosdid=osd.$OSD 'BEGIN { out=0 } { if($0 ~ /====/) {out=0} if(out) {print $0;} if($0 ~ awkosdid) {out=1}; }'  | grep -Eo "db device.*$" | sed 's/db device.*\/dev\///';`
   fi
 fi
-
 
 
 echo "ceph-volume lvm zap $DEV"
