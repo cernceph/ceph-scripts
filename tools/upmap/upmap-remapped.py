@@ -112,6 +112,7 @@ for pg in upmaps:
    has_upmap[pgid] = True
 
 # handle each remapped pg
+print('while ceph status | grep -q "peering\|activating"; do sleep 2; done')
 num_changed = 0
 for pg in remapped:
   pgid = pg['pgid']
