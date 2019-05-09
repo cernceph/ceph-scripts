@@ -37,12 +37,25 @@
 from __future__ import print_function
 import json, commands, sys
 
+try:
+  OSDS = commands.getoutput('ceph osd ls -f json')
+except ValueError:
+  eprint('Error loading OSD IDs')
+  sys.exit(1)
+
 def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+  print(*args, file=sys.stderr, **kwargs)
+
+def valid_osds(osds):
+  valid = []
+  for osd in osds:
+    if str (osd) in OSDS:
+      valid.append(osd)
+  return valid
 
 def gen_upmap_replicated(up, acting):
-  u = set(up)
-  a = set(acting)
+  u = valid_osds(set(up))
+  a = valid_osds(set(acting))
   assert(len(u) == len(a))
   lhs = u - a
   rhs = a - u
@@ -50,9 +63,11 @@ def gen_upmap_replicated(up, acting):
   return zip(lhs, rhs)
 
 def gen_upmap_erasure(up, acting):
-  assert(len(up) == len(acting))
+  u = valid_osds(up)
+  a = valid_osds(acting)
+  assert(len(u) == len(a))
   mappings = []
-  for pair in zip(up, acting):
+  for pair in zip(u, a):
     if pair[0] != pair[1]:
       mappings.append(pair)
   return mappings
@@ -68,18 +83,6 @@ def rm_upmap_pg_items(pgid):
 
 
 # start here
-
-# discover degraded pgs (we won't upmap any degraded pgs)
-try:
-  degraded_json = commands.getoutput('ceph pg ls degraded -f json')
-  degraded = json.loads(degraded_json)
-except ValueError:
-  degraded = []
-
-# save their pgids for later
-degraded_pgids = []
-for pg in degraded:
-  degraded_pgids.append(pg['pgid'])
 
 # discover remapped pgs
 try:
@@ -108,41 +111,44 @@ except:
 # discover if each pg is already upmapped
 has_upmap = {}
 for pg in upmaps:
-   pgid = str(pg['pgid'])
-   has_upmap[pgid] = True
+  pgid = str(pg['pgid'])
+  has_upmap[pgid] = True
 
 # handle each remapped pg
 print('while ceph status | grep -q "peering\|activating"; do sleep 2; done')
-num_changed = 0
+num = 0
 for pg in remapped:
+  if num == 50:
+    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
+    num = 0
+
   pgid = pg['pgid']
 
-  # skip the degraded pgs
-  if pgid in degraded_pgids:
-    continue 
-  
   try:
     if has_upmap[pgid]:
       rm_upmap_pg_items(pgid)
-      num_changed += 1
+      num += 1
       continue
   except KeyError:
     pass
-
-  if (num_changed + 1) % 50 == 0:
-    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
 
   up = pg['up']
   acting = pg['acting']
   pool = pgid.split('.')[0]
   if pool_type[pool] == 'replicated':
-    pairs = gen_upmap_replicated(up, acting)
+    try:
+      pairs = gen_upmap_replicated(up, acting)
+    except:
+      continue
   elif pool_type[pool] == 'erasure':
-    pairs = gen_upmap_erasure(up, acting)
+    try:
+      pairs = gen_upmap_erasure(up, acting)
+    except:
+      continue
   else:
     eprint('Unknown pool type for %s' % pool)
     sys.exit(1)
   upmap_pg_items(pgid, pairs)
-  num_changed += 1
+  num += 1
 
 print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
