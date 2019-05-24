@@ -4,7 +4,7 @@
 # Created by: Theofilos Mouratidis <t.mour@cern.ch>
 # Date: 2019/05/24
 
-CLUSTER="none"
+CLUSTER="ceph"
 SAVE_WHAT=""
 PREFIX=""
 
