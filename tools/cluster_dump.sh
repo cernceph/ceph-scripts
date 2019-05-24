@@ -125,7 +125,7 @@ get_target() {
 }
 
 exec_cmd() {
-    eval "ceph --cluster $CLUSTER $1 > $(get_target $2) 2> /dev/null"
+    eval "ceph --cluster $CLUSTER $1 > $(get_target $2) 2>> /var/log/ceph/cluster_dump.log"
 }
 
 for key in $SAVE_WHAT; do
