@@ -1,22 +1,61 @@
 #!/usr/bin/env bash
 
+# Licence: MIT
+# Created by: Theofilos Mouratidis <t.mour@cern.ch>
+# Date: 2019/05/24
+
 CLUSTER="none"
 SAVE_WHAT=""
 PREFIX=""
 
+#
+# creates an entry that executes a ceph command
+# eg the first one:
+#   * Creates the --pg argument
+#   * The first part is what will be executed after "ceph"
+#     - In this example it will execute "ceph pg dump"
+#   * The second part is the argument description
+#   * Use ",," as a separator betwwen command and description
+# each k/v pair will create both the argument functionality
+# and the entry in the --help page
+#
+declare -A CMD=(
+    ["pg"]="pg dump ,, Saves the pg state"
+    ["osd"]="osd dump ,, Saves the osd state"
+    ["crush"]="osd get crushmap | crushtool -d - ,, Saves the crushmap"
+)
+
 while test $# -gt 0; do
     case "$1" in
         -h|--help)
-            echo "This script saves the upmaps of the cluster."
-            echo "When a change is done, run this script again"
-            echo "to load the lost upmaps."
+            echo "This script saves various data from ceph commands"
+            echo "mainly used to log critical data for recovery reasons"
             echo
-            echo "  -h/--help        Show this message"
-            echo "  -s/--save        Save the upmaps"
-            echo "  -l/--load        Load lost upmaps"
+            echo "Example command: cluster_dump -a -c erin /tmp/out"
+            echo "It will dump all the below commands to the /tmp/out_* prefix"
+            echo
+            # Use \t to align your fields in the table
+            OUT=""
+            OUT="$OUT\n  -h/--help\t\tShow this message"
+            OUT="$OUT\n  -c/--cluster\t<name>\tSelect cluster"
+            OUT="$OUT\n  -a/--all\t\tDump all below commands"
+            echo -e "$OUT" | column -ts $'\t'
+            echo
+            # Auto gen, don't edit
+            echo " COMMANDS:"
+            OUT=""
+            for key in ${!CMD[@]}; do
+                OUT="$OUT\n  --$key\t${CMD[$key]##*",,"}"
+            done
+            echo -e "$OUT" | column -ts $'\t' -o $'\t\t'
             echo
             exit 0
             ;;
+        # Can define additional arguments with custom functionality as:
+        # -m|--mycommand)
+        #   do_stuff
+        # ;;
+        # for main functionality just use the $CMD dictionary above
         -c|--cluster)
             shift
             case "$1" in
@@ -29,45 +68,66 @@ while test $# -gt 0; do
                     ;;
             esac
             ;;
-        --pg|--osd|--crush)
-            if grep -v "$1" <<< "$SAVE_WHAT" > /dev/null; then
-                SAVE_WHAT="$SAVE_WHAT `sed 's/-//g' <<< "$1"`"
+        -a|--all)
+            if [[ $SAVE_WHAT == "" ]]; then
+                SAVE_WHAT="all"
+            else
+                echo "All flag is incompatible with these others: $SAVE_WHAT"
+                exit 0
             fi
             ;;
         *)
-            if test -f "$1"; then
+            found=false
+            if [[ "$1" =~ ^- ]]; then
+                if [[ "$1" =~ ^-- ]]; then
+                    ARG="${1//-}"
+                    if [[ "${!CMD[@]}" =~ "$ARG" ]]; then
+                        if [[ "$SAVE_WHAT" =~ "all" ]]; then
+                            echo "All flag is incompatible with these others: $ARG"
+                            exit 0
+                        fi
+                        if grep -v "$ARG" <<< "$SAVE_WHAT" > /dev/null; then
+                            SAVE_WHAT="$SAVE_WHAT $ARG"
+                            found=true
+                        fi
+                    fi
+                fi
+                if [[ $found == false ]]; then
+                    echo "Unknown argument $ARG"
+                    exit 0
+                fi
+            elif touch "$1" > /dev/null 2>&1; then
                 PREFIX="$1"
+                rm -f "$1"
             else
-                echo "Unknown argument: $1"
+                echo "Parent path does not exist: $1"
+                exit 0
             fi
             ;;
     esac
     shift
 done
 
-if [[ $PREFIX == "" ]];
+if [[ $PREFIX == "" ]]; then
    echo "No target prefix found"
    exit 0
 fi
 
-if [[ $SAVE_WHAT == "" ]]; then
-    SAVE_WHAT="pg osd crush"
+if [[ $SAVE_WHAT == "all" ]]; then
+    SAVE_WHAT="${!CMD[@]}"
+elif [[ $SAVE_WHAT == "" ]]; then
+    echo "No action is defined. Check what to do with -h/--help"
+    exit 0
+fi
 
 get_target() {
-    return  "$PREFIX_$1_`date +%s`"
+    echo "${PREFIX}_$1_`date +%s`"
 }
 
-for i in $SAVE_WHAT; do
-    case $i in
-        pg)
-            ceph --cluster $CLUSTER pg dump > "$(get_target $i)"
-            ;;
-        osd)
-            ceph --cluster $CLUSTER osd dump > "$(get_target $i)"
-            ;;
-        crush)
-            ceph --cluster $CLUSTER osd getcrushmap | crushtool -d - > "$(get_target $i)"
-            ;;
-    esac
-done
+exec_cmd() {
+    eval "ceph --cluster $CLUSTER $1 > $(get_target $2) 2> /dev/null"
+}
 
+for key in $SAVE_WHAT; do
+    exec_cmd "${CMD[$key]%%",,"*}" $key
+done
