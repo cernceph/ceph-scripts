@@ -22,7 +22,7 @@ PREFIX=""
 declare -A CMD=(
     ["pg"]="pg dump ,, Saves the pg state"
     ["osd"]="osd dump ,, Saves the osd state"
-    ["crush"]="osd get crushmap | crushtool -d - ,, Saves the crushmap"
+    ["crush"]="osd getcrushmap | crushtool -d - ,, Saves the crushmap"
 )
 
 while test $# -gt 0; do
@@ -98,7 +98,6 @@ while test $# -gt 0; do
                 fi
             elif touch "$1" > /dev/null 2>&1; then
                 PREFIX="$1"
-                rm -f "$1"
             else
                 echo "Parent path does not exist: $1"
                 exit 0
