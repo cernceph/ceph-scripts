@@ -22,7 +22,7 @@ PREFIX=""
 declare -A CMD=(
     ["pg"]="pg dump ,, Saves the pg state"
     ["osd"]="osd dump ,, Saves the osd state"
-    ["crush"]="osd getcrushmap &> /dev/null | crushtool -d - ,, Saves the crushmap"
+    ["crush"]="osd getcrushmap 2> /dev/null | crushtool -d - ,, Saves the crushmap"
 )
 
 while test $# -gt 0; do
