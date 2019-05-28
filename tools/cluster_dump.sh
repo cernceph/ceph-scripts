@@ -97,10 +97,15 @@ while test $# -gt 0; do
                     exit 0
                 fi
             elif touch "$1" > /dev/null 2>&1; then
-                if test -d "$1" && [[ "${1: -1}" != "/" ]]; then
-                    PREFIX="${PREFIX}/"
+                if test -d "$1"; then
+                    if [[ "${1: -1}" != "/" ]]; then
+                        PREFIX="$1/"
+                    else
+                        PREFIX="$1"
+                    fi
+                elif test -f "$1"; then
+                    PREFIX="$1_"
                 fi
-                PREFIX="$1"
             else
                 echo "Parent path does not exist: $1"
                 exit 0
@@ -111,7 +116,7 @@ while test $# -gt 0; do
 done
 
 if [[ $PREFIX == "" ]]; then
-   echo "No target prefix found"
+   echo "Error with output file prefix"
    exit 0
 fi
 
@@ -122,12 +127,8 @@ elif [[ $SAVE_WHAT == "" ]]; then
     exit 0
 fi
 
-get_target() {
-    echo "${PREFIX}_${CLUSTER}_$1_`date +%s`"
-}
-
 exec_cmd() {
-    eval "ceph --cluster $CLUSTER $1 > $(get_target $2) 2>> /var/log/ceph/cluster_dump.log"
+    eval "ceph --cluster $CLUSTER $1 > ${PREFIX}${CLUSTER}_$1_`date +%s` 2>> /var/log/ceph/cluster_dump.log"
 }
 
 for key in $SAVE_WHAT; do
