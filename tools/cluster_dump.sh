@@ -128,7 +128,7 @@ elif [[ $SAVE_WHAT == "" ]]; then
 fi
 
 exec_cmd() {
-    echo "ceph --cluster $CLUSTER $1 > ${PREFIX}${CLUSTER}_$2_$(date +%s) 2>> /var/log/ceph/cluster_dump.log"
+    eval "ceph --cluster $CLUSTER $1 > ${PREFIX}${CLUSTER}_$2_$(date +%s) 2>> /var/log/ceph/cluster_dump.log"
 }
 
 for key in $SAVE_WHAT; do
