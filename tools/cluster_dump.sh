@@ -21,8 +21,14 @@ PREFIX=""
 #
 declare -A CMD=(
     ["pg"]="pg dump ,, Saves the pg state"
+    ["pg-json"]="pg dump -f json-pretty ,, Saves the pg state"
     ["osd"]="osd dump ,, Saves the osd state"
+    ["osd-json"]="osd dump -f json-pretty ,, Saves the osd state"
     ["crush"]="osd getcrushmap 2> /dev/null | crushtool -d - ,, Saves the crushmap"
+    ["tree"]="osd tree ,, Saves the osd tree"
+    ["tree-json"]="osd tree -f json-pretty ,, Saves the osd tree"
+    ["df"]="osd df ,, Saves the osd df"
+    ["df-json"]="osd df -f json-pretty ,, Saves the osd df"
 )
 
 while test $# -gt 0; do
