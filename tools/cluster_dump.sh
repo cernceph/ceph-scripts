@@ -29,6 +29,9 @@ declare -A CMD=(
     ["tree-json"]="osd tree -f json-pretty ,, Saves the osd tree (json)"
     ["df"]="osd df ,, Saves the osd df"
     ["df-json"]="osd df -f json-pretty ,, Saves the osd df (json)"
+    ["osd-map"]="osd getmap ,, Saves the osd map"
+    ["mon-map"]="mon getmap ,, Saves the mon map"
+    ["mds-map"]="mds getmap ,, Saves the mds map"
 )
 
 while test $# -gt 0; do
