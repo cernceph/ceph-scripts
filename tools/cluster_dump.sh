@@ -97,6 +97,9 @@ while test $# -gt 0; do
                     exit 0
                 fi
             elif touch "$1" > /dev/null 2>&1; then
+                if test -d "$1" && [[ "${1: -1}" != "/" ]]; then
+                    PREFIX="${PREFIX}/"
+                fi
                 PREFIX="$1"
             else
                 echo "Parent path does not exist: $1"
@@ -120,7 +123,7 @@ elif [[ $SAVE_WHAT == "" ]]; then
 fi
 
 get_target() {
-    echo "${PREFIX}_$1_`date +%s`"
+    echo "${PREFIX}_${CLUSTER}_$1_`date +%s`"
 }
 
 exec_cmd() {
