@@ -72,7 +72,7 @@ while test $# -gt 0; do
                     CLUSTER="$1"
                     ;;
                 *)
-                    echo "After -c, $1 doesn't look liek a cluster name"
+                    echo "After -c, $1 doesn't look like a cluster name"
                     exit 0
                     ;;
             esac
