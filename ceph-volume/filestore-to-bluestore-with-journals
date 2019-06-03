@@ -74,7 +74,7 @@ out_and_destroy()
   if [[ `ceph osd metadata $osd_id | jq -r .osd_objectstore` == filestore ]];
   then
     ceph osd out $osd_id
-    while ! ceph osd safe-to-destroy $osd_id; do sleep 10 ; done
+    while ! ceph osd safe-to-destroy $osd_id; do sleep 300; done
     systemctl stop ceph-osd@$osd_id
 
     sleep 2
