@@ -105,6 +105,6 @@ do
   if [[ $next == false ]]; then continue; fi
   ceph-volume lvm zap $ssd
   if ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'` --osd-ids `grep $ssd $osd_file | awk '{print $1}'`; then
-      sed -i "/$ssd/d" $osd_file
+      sed -i "/\b$ssd\b/d" $osd_file
   fi
 done
