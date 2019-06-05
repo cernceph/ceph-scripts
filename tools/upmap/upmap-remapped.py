@@ -54,8 +54,8 @@ def valid_osds(osds):
   return valid
 
 def gen_upmap_replicated(up, acting):
-  u = valid_osds(set(up))
-  a = valid_osds(set(acting))
+  u = set(valid_osds(up))
+  a = set(valid_osds(acting))
   assert(len(u) == len(a))
   lhs = u - a
   rhs = a - u
