@@ -13,5 +13,5 @@ while read d1; read d2; do
         echo vgcreate $vgname $d1 $d2
         echo lvcreate -i 2 -l 100%FREE -n $lvname $vgname
         echo lvcreate -l $lvols%VG -n $cname cephrocks
-        echo ceph-volume lvm create --bluestore --data $vgname/$lvname --block.db cephrocks/$cname #--block.wal cephrocks/$cname
+        echo ceph-volume lvm create --bluestore --data $vgname/$lvname --block.db cephrocks/$cname
 done
