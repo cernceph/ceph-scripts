@@ -74,7 +74,7 @@ out_and_destroy()
   if [[ `ceph osd metadata $osd_id | jq -r .osd_objectstore` == filestore ]];
   then
     ceph osd out $osd_id
-    while ! ceph osd safe-to-destroy $osd_id; do sleep 10 ; done
+    while ! ceph osd safe-to-destroy $osd_id; do sleep 300; done
     systemctl stop ceph-osd@$osd_id
 
     sleep 2
@@ -96,13 +96,15 @@ do
 
   next=true
   cut -f1 < $osd_file | while read a; do
-    if ! ( ceph osd tree | grep -P "osd\.$a\b" | grep destroyed );
-    then
-      echo "$a is not destroyed with $ssd"
-      next=false
-    fi
+      if ! ( ceph osd tree | grep -P "osd\.$a\b" | grep destroyed );
+      then
+          echo "$a is not destroyed with $ssd"
+          next=false
+      fi
   done
   if [[ $next == false ]]; then continue; fi
   ceph-volume lvm zap $ssd
-  ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'` --osd-ids `grep $ssd $osd_file | awk '{print $1}'`
+  if ceph-volume lvm batch --yes $ssd `grep $ssd $osd_file | awk '{print $2}'` --osd-ids `grep $ssd $osd_file | awk '{print $1}'`; then
+      sed -i "/\b$ssd\b/d" $osd_file
+  fi
 done
