@@ -7,7 +7,7 @@
 # Author: Dan van der Ster (daniel.vanderster@cern.ch)
 #
 
-import subprocess, json, sys, time
+import subprocess, json, sys, time, os
 
 pg_data = None
 df_data = None
@@ -19,43 +19,40 @@ crush_data = None
 osd_df_data = None
 
 
+def jsoncmd(command):
+  with open(os.devnull, 'w') as devnull:
+    out = subprocess.check_output(command.split(), stderr=devnull)
+  return json.loads(out)
+
 def init_df():
   global df_data
-  df_json = subprocess.check_output(['ceph', 'df', '--format=json', '2>/dev/null'])
-  df_data = json.loads(df_json)
+  df_data = jsoncmd('ceph df --format=json')
 
 def init_mon():
   global mon_data
-  mon_json = subprocess.check_output(['ceph', 'mon', 'dump', '--format=json', '2>/dev/null'])
-  mon_data = json.loads(mon_json)
+  mon_data = jsoncmd('ceph mon dump --format=json')
 
 def init_osd():
   global osd_data
   global osd_df_data
-  osd_json = subprocess.check_output(['ceph', 'osd', 'dump', '--format=json', '2>/dev/null'])
-  osd_data = json.loads(osd_json)
-  osd_df_json = subprocess.check_output(['ceph', 'osd', 'df', '--format=json', '|', 'jq', '. 2>/dev/null'])
-  osd_df_data = json.loads(osd_df_json)
+  osd_data = jsoncmd('ceph osd dump --format=json')
+  osd_df_data = jsoncmd('ceph osd df --format=json')
 
 def init_pg():
   global pg_data
-  pg_json = subprocess.check_output(['ceph', 'pg', 'dump', '--format=json', '2>/dev/null'])
-  pg_data = json.loads(pg_json)
+  pg_data = jsoncmd('ceph pg dump --format=json')
 
 def init_auth():
   global auth_data
-  auth_json = subprocess.check_output(['ceph', 'auth', 'list', '--format=json', '2>/dev/null'])
-  auth_data = json.loads(auth_json)
+  auth_data = jsoncmd('ceph auth list --format=json')
 
 def init_stat():
   global stat_data
-  stat_json = subprocess.check_output(['ceph', '-s', '-f', 'json', '2>/dev/null'])
-  stat_data = json.loads(stat_json)
+  stat_data = jsoncmd('ceph -s -f json')
 
 def init_crush():
   global crush_data
-  crush_json = subprocess.check_output(['ceph', 'osd', 'tree', '-f', 'json', '2>/dev/null'])
-  crush_data = json.loads(crush_json)
+  crush_data = jsoncmd('ceph osd tree -f json')
 
 def get_json():
   init_mon()
