@@ -48,12 +48,12 @@ def measure_latency(test_pool):
   return latency_ms
 
 def get_num_backfilling():
-  cmd = "ceph pg stat | tr ',:' '\n' | awk '/backfilling/ { total += $1}; END { print total}'"
-  out = commands.getoutput(cmd)
-  if not out:
-    n = 0
-  else:
-    n = int(out)
+  n = 0
+  for status in ['backfilling', 'backfill_wait']:
+    cmd = "ceph pg stat | tr ',:' '\n' | awk '/%s/ { total += $1}; END { print total}'"
+    out = commands.getoutput(cmd % status)
+    if out:
+      n += int(out)
   print "get_num_backfilling: PGs currently backfilling: %s" % n
   return n
 
