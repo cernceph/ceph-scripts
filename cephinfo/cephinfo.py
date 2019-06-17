@@ -39,7 +39,7 @@ def init_osd():
 
 def init_pg():
   global pg_data
-  pg_json = subprocess.check_output(['ceph', 'pg', ' dump --format=json 2>/dev/null'])
+  pg_json = subprocess.check_output(['ceph', 'pg', 'dump', '--format=json', '2>/dev/null'])
   pg_data = json.loads(pg_json)
 
 def init_auth():
