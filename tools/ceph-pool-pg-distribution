@@ -25,7 +25,7 @@ for pg in cephinfo.get_pg_stats():
     if not all and poolnum not in pools:
         continue
     total_pgs += 1
-    for osd in pg['acting']:
+    for osd in pg['up']:
         osds_d[osd] += 1
 
 total_osds = len(osds_d.keys())
