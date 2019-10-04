@@ -9,14 +9,6 @@ do
       continue
    fi
 
-   if grep -w ${PG} /var/log/ceph/ceph.log | grep -w ERR | grep -q 'candidate had a read error'
-   then
-      echo PG $PG seems auto-repairable, trying.
-   else
-      echo PG $PG is not auto-repairable, skipping.
-      continue
-   fi
-
    # disable other scrubs
    ceph osd set nodeep-scrub
    ceph osd set noscrub
@@ -25,7 +17,7 @@ do
    ACTING=$(ceph pg $PG query | jq -r .acting[])
    for OSD in $ACTING
    do
-      ceph tell osd.${OSD} injectargs -- --osd_max_scrubs=3
+      ceph tell osd.${OSD} injectargs -- --osd_max_scrubs=3 --osd_scrub_during_recovery=true
    done
 
    ceph pg repair $PG
@@ -34,7 +26,7 @@ do
 
    for OSD in $ACTING
    do
-      ceph tell osd.${OSD} injectargs -- --osd_max_scrubs=1
+      ceph tell osd.${OSD} injectargs -- --osd_max_scrubs=1 --osd_scrub_during_recovery=false
    done
 
    # disable other scrubs
