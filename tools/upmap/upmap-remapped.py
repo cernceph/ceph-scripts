@@ -87,11 +87,13 @@ def rm_upmap_pg_items(pgid):
 # discover remapped pgs
 try:
   remapped_json = commands.getoutput('ceph pg ls remapped -f json')
-  try:
-# Nautilus added a new tier to the json output
-    remapped = json.loads(remapped_json)['pg_stats']
-  except:
-    remapped = json.loads(remapped_json)
+  remapped = json.loads(remapped_json)
+# nautilus added a new tier to the json output
+  if 'pg_ready' in remapped:
+    if 'pg_stats' in remapped:
+      remapped = json.loads(remapped_json)['pg_stats']
+    else:
+      raise ValueError
 except ValueError:
   eprint('Error loading remapped pgs')
   sys.exit(1)
