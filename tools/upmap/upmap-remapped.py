@@ -35,11 +35,11 @@
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
 from __future__ import print_function
-import json, commands, sys
+import json, subprocess, sys
 
 try:
-  OSDS = commands.getoutput('ceph osd ls -f json')
-except ValueError:
+  OSDS = subprocess.check_output(['ceph', 'osd', 'ls', '-f', 'json'])
+except:
   eprint('Error loading OSD IDs')
   sys.exit(1)
 
@@ -86,21 +86,31 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  remapped_json = commands.getoutput('ceph pg ls remapped -f json')
+  remapped_json = subprocess.check_output(['ceph', 'pg', 'ls', 'remapped', '-f', 'json'])
   remapped = json.loads(remapped_json)
-except ValueError:
+# nautilus added a new tier to the json output
+  if 'pg_ready' in remapped:
+    if 'pg_stats' in remapped:
+      remapped = json.loads(remapped_json)['pg_stats']
+    else:
+      raise ValueError
+except:
   eprint('Error loading remapped pgs')
   sys.exit(1)
 
 # discover existing upmaps
-osd_dump_json = commands.getoutput('ceph osd dump -f json')
-osd_dump = json.loads(osd_dump_json)
-upmaps = osd_dump['pg_upmap_items']
+try:
+  osd_dump_json = subprocess.check_output(['ceph', 'osd', 'dump', '-f', 'json'])
+  osd_dump = json.loads(osd_dump_json)
+  upmaps = osd_dump['pg_upmap_items']
+except:
+  eprint('Error loading pg_upmap_items')
+  sys.exit(1)
 
 # discover pools replicated or erasure
 pool_type = {}
 try:
-  for line in commands.getoutput('ceph osd pool ls detail').split('\n'):
+  for line in subprocess.check_output(['ceph', 'osd', 'pool', 'ls', 'detail']).split('\n'):
     if 'pool' in line:
       x = line.split(' ')
       pool_type[x[1]] = x[3]
