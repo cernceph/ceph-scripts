@@ -21,6 +21,8 @@ pycrc 0.7.1 (http://www.tty1.net/pycrc/). Command line used:
 './pycrc.py --model=crc-32c --generate c --algorithm=table-driven'
 """
 import array
+import sys
+import struct
 CRC_TABLE = (
     0x00000000L, 0xf26b8303L, 0xe13b70f7L, 0x1350f3f4L,
     0xc79a971fL, 0x35f1141cL, 0x26a1e7e8L, 0xd4ca64ebL,
@@ -105,7 +107,7 @@ def crc_update(crc, data):
   for b in buf:
     table_index = (crc ^ b) & 0xff
     crc = (CRC_TABLE[table_index] ^ (crc >> 8)) & _MASK
-  return crc ^ _MASK
+  return crc
 def crc_finalize(crc):
   """Finalize CRC-32C checksum.
   This function should be called as last step of crc calculation.
@@ -115,11 +117,24 @@ def crc_finalize(crc):
     finalized 32-bit checksum as long
   """
   return crc & _MASK
-def crc(data):
+def crc(init, data):
   """Compute CRC-32C checksum of the data.
   Args:
     data: byte array, string or iterable over bytes.
   Returns:
     32-bit CRC-32C checksum of data as long.
   """
-  return crc_finalize(crc_update(CRC_INIT, data))
+  return crc_finalize(crc_update(init^0xFFFFFFFF, data))
+
+# Assert Ceph type crc correctness
+a = "foo bar baz"
+b = "whiz bang boom"
+assert(crc(0,a) == 4119623852)
+assert(crc(1234,a) == 881700046)
+assert(crc(0,b) == 2360230088)
+assert(crc(5678,b) == 3743019208)
+
+for f in sys.argv[1:]:
+    print f,'\t',
+    print 'calculated_crc:',  crc(0xFFFFFFFF, open(f).read()[:-4]),
+    print '\ttail_crc:', struct.unpack('I', open(f).read()[-4:])[0]
