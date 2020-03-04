@@ -87,17 +87,20 @@ def get_osd_states():
     if osd['in'] == 0: osd_states['out']  += 1
   return osd_states
 
+def get_pg_data():
+  return pg_data['pg_map'] if 'pg_map' in pg_data else pg_data
+
 def get_pg_stats():
-  return list(pg_data['pg_stats'])
+  return list(get_pg_data()['pg_stats'])
 
 def get_pg_stats_sum():
-  return pg_data['pg_stats_sum']
+  return get_pg_data()['pg_stats_sum']
 
 def get_osd_stats_sum():
-  return pg_data['osd_stats_sum']
+  return get_pg_data()['osd_stats_sum']
 
 def get_pg_stats_delta():
-  return pg_data['pg_stats_delta']
+  return get_pg_data()['pg_stats_delta']
 
 def get_n_pgs():
   return len(get_pg_stats())
