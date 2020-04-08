@@ -68,7 +68,7 @@ def measure_latency(test_pool):
   return latency_ms
 
 def get_num_inactive():
-  cmd = "ceph pg ls | egrep -v 'PG_STAT|active' | wc -l"
+  cmd = "ceph pg ls |grep '^[0-9]'| egrep -v 'PG_STAT|active' | wc -l"
   out = commands.getoutput(cmd)
   n = int(out)
   print "get_num_inactive: PGs currently inactive: %s" % n
@@ -226,4 +226,3 @@ def main(argv):
 
 if __name__ == "__main__":
   main(sys.argv[1:])
-
