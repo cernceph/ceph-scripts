@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for PG in $(ceph pg ls inconsistent -f json | jq -r .[].pgid)
+for PG in $(ceph pg ls inconsistent -f json | jq -r .pg_stats[].pgid)
 do
    echo Checking inconsistent PG $PG
    if ceph pg ls repair | grep -wq ${PG}
