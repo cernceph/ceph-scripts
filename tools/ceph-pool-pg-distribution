@@ -12,10 +12,10 @@ if len(sys.argv) > 1:
     else:
         pools = pool.split(',')
 else:
-    print "Usage: ceph-pool-pg-distribution <pool id>[,<pool id>]"
+    print("Usage: ceph-pool-pg-distribution <pool id>[,<pool id>]")
     sys.exit(1)
 
-print "Searching for PGs in pools: %s" % pools
+print("Searching for PGs in pools: {0}".format(pools))
 cephinfo.init_pg()
 osds_d = defaultdict(int)
 total_pgs = 0
@@ -30,13 +30,12 @@ for pg in cephinfo.get_pg_stats():
 
 total_osds = len(osds_d.keys())
 
-print "Summary:", total_pgs, "pgs on", total_osds, "osds"
-print
-print "Num OSDs with X PGs:"
+print("Summary: {0} PGs on {1} osds\n".format(total_pgs, total_osds))
+print("Num OSDs with X PGs:")
 
 count_d = defaultdict(int)
 for value in osds_d.values():
     count_d[value] += 1
 
-for k in sorted(count_d.keys()):
-    print "%3d:" % k, count_d[k]
+for k, v in sorted(count_d.items()):
+    print("{0}: {1}".format(k, v))
