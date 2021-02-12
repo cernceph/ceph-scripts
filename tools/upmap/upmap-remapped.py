@@ -38,7 +38,7 @@ from __future__ import print_function
 import json, subprocess, sys
 
 try:
-  OSDS = subprocess.check_output(['ceph', 'osd', 'ls', '-f', 'json'])
+  OSDS = json.loads(subprocess.check_output(['ceph', 'osd', 'ls', '-f', 'json']))
 except:
   eprint('Error loading OSD IDs')
   sys.exit(1)
@@ -49,7 +49,7 @@ def eprint(*args, **kwargs):
 def valid_osds(osds):
   valid = []
   for osd in osds:
-    if str (osd) in OSDS:
+    if osd in OSDS:
       valid.append(osd)
   return valid
 
@@ -110,7 +110,7 @@ except:
 # discover pools replicated or erasure
 pool_type = {}
 try:
-  for line in subprocess.check_output(['ceph', 'osd', 'pool', 'ls', 'detail']).split('\n'):
+  for line in subprocess.check_output(['ceph', 'osd', 'pool', 'ls', 'detail']).decode().split('\n'):
     if 'pool' in line:
       x = line.split(' ')
       pool_type[x[1]] = x[3]
