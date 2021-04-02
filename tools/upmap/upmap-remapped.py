@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # DISCLAIMER: THIS SCRIPT COMES WITH NO WARRANTY OR GUARANTEE
 # OF ANY KIND.
@@ -34,49 +34,39 @@
 #
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
-from __future__ import print_function
+
 import json, subprocess, sys
 
 try:
-  OSDS = subprocess.check_output(['ceph', 'osd', 'ls', '-f', 'json'])
-except:
+  OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json'))
+  DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq .nodes'))
+except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
 
 def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
-def valid_osds(osds):
-  valid = []
-  for osd in osds:
-    if str (osd) in OSDS:
-      valid.append(osd)
-  return valid
+def crush_weight(id):
+  for o in DF:
+    if o['id'] == id:
+      return o['crush_weight'] * o['reweight']
+  return 0
 
-def gen_upmap_replicated(up, acting):
-  u = set(valid_osds(up))
-  a = set(valid_osds(acting))
-  assert(len(u) == len(a))
-  lhs = u - a
-  rhs = a - u
-  assert(len(lhs) == len(rhs))
-  return zip(lhs, rhs)
-
-def gen_upmap_erasure(up, acting):
-  u = valid_osds(up)
-  a = valid_osds(acting)
-  assert(len(u) == len(a))
-  mappings = []
-  for pair in zip(u, a):
-    if pair[0] != pair[1]:
-      mappings.append(pair)
-  return mappings
+def gen_upmap(up, acting):
+  assert(len(up) == len(acting))
+  pairs = []
+  for p in zip(up, acting):
+    if p[0] != p[1] and p[0] in OSDS and crush_weight(p[1]) > 0:
+      pairs.append(p)
+  return pairs
 
 def upmap_pg_items(pgid, mapping):
-  print('ceph osd pg-upmap-items %s ' % pgid, end='')
-  for pair in mapping:
-    print('%s %s ' % pair, end='')
-  print('&')
+  if len(mapping):
+    print('ceph osd pg-upmap-items %s ' % pgid, end='')
+    for pair in mapping:
+      print('%s %s ' % pair, end='')
+    print('&')
 
 def rm_upmap_pg_items(pgid):
   print('ceph osd rm-pg-upmap-items %s &' % pgid)
@@ -86,31 +76,29 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  remapped_json = subprocess.check_output(['ceph', 'pg', 'ls', 'remapped', '-f', 'json'])
+  remapped_json = subprocess.getoutput('ceph pg ls remapped -f json')
   remapped = json.loads(remapped_json)
-# nautilus added a new tier to the json output
-  if 'pg_ready' in remapped:
-    if 'pg_stats' in remapped:
-      remapped = json.loads(remapped_json)['pg_stats']
-    else:
-      raise ValueError
-except:
+except ValueError:
   eprint('Error loading remapped pgs')
   sys.exit(1)
 
-# discover existing upmaps
+# nautilus compat
 try:
-  osd_dump_json = subprocess.check_output(['ceph', 'osd', 'dump', '-f', 'json'])
-  osd_dump = json.loads(osd_dump_json)
-  upmaps = osd_dump['pg_upmap_items']
-except:
-  eprint('Error loading pg_upmap_items')
-  sys.exit(1)
+  _remapped = remapped['pg_stats']
+  remapped = _remapped
+except KeyError:
+  print("There are no remapped PGs")
+  sys.exit(0)
+
+# discover existing upmaps
+osd_dump_json = subprocess.getoutput('ceph osd dump -f json')
+osd_dump = json.loads(osd_dump_json)
+upmaps = osd_dump['pg_upmap_items']
 
 # discover pools replicated or erasure
 pool_type = {}
 try:
-  for line in subprocess.check_output(['ceph', 'osd', 'pool', 'ls', 'detail']).split('\n'):
+  for line in subprocess.getoutput('ceph osd pool ls detail').split('\n'):
     if 'pool' in line:
       x = line.split(' ')
       pool_type[x[1]] = x[3]
@@ -147,12 +135,12 @@ for pg in remapped:
   pool = pgid.split('.')[0]
   if pool_type[pool] == 'replicated':
     try:
-      pairs = gen_upmap_replicated(up, acting)
+      pairs = gen_upmap(up, acting)
     except:
       continue
   elif pool_type[pool] == 'erasure':
     try:
-      pairs = gen_upmap_erasure(up, acting)
+      pairs = gen_upmap(up, acting)
     except:
       continue
   else:
