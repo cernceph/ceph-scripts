@@ -53,12 +53,20 @@ def crush_weight(id):
       return o['crush_weight'] * o['reweight']
   return 0
 
-def gen_upmap(up, acting):
+def gen_upmap(up, acting, replicated=False):
   assert(len(up) == len(acting))
   pairs = []
   for p in zip(up, acting):
     if p[0] != p[1] and p[0] in OSDS and crush_weight(p[1]) > 0:
       pairs.append(p)
+
+  # if replicated, remove indirect mappings
+  # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804 804 530 &
+  if replicated:
+    p = list(pairs)
+    u = set([x[0] for x in p])
+    a = set([x[1] for x in p])
+    pairs = list(zip(u-a, a-u))
   return pairs
 
 def upmap_pg_items(pgid, mapping):
@@ -135,7 +143,7 @@ for pg in remapped:
   pool = pgid.split('.')[0]
   if pool_type[pool] == 'replicated':
     try:
-      pairs = gen_upmap(up, acting)
+      pairs = gen_upmap(up, acting, replicated=True)
     except:
       continue
   elif pool_type[pool] == 'erasure':
