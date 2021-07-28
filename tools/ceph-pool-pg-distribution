@@ -11,6 +11,12 @@ if len(sys.argv) > 1:
         all = True
     else:
         pools = pool.split(',')
+        for pool in pools:
+            try:
+                int(pool)
+            except ValueError:
+                print("Parameter %s does not look like a pool id." % pool)
+                sys.exit(1)
 else:
     print("Usage: ceph-pool-pg-distribution <pool id>[,<pool id>]")
     sys.exit(1)
