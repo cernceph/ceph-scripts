@@ -37,15 +37,15 @@
 
 import json, subprocess, sys
 
+def eprint(*args, **kwargs):
+  print(*args, file=sys.stderr, **kwargs)
+
 try:
   OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json'))
   DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq .nodes'))
 except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
-
-def eprint(*args, **kwargs):
-  print(*args, file=sys.stderr, **kwargs)
 
 def crush_weight(id):
   for o in DF:
