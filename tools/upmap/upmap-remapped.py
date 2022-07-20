@@ -53,7 +53,7 @@ except ValueError:
 
 for arg in sys.argv[1:]:
   if arg == "--ignore-backfilling":
-    print ("# All actively backfilling PGs will be ignored.")
+    eprint ("All actively backfilling PGs will be ignored.")
     ignore_backfilling = True
 
 def crush_weight(id):
