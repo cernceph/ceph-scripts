@@ -12,6 +12,9 @@
 # Usage (print only): ./upmap-remapped.py
 # Usage (production): ./upmap-remapped.py | sh
 #
+# Optional to ignore PGs that are backfilling and not backfill+wait:
+# Usage: ./upmap-remapped.py --ignore-backfilling
+#
 # This tool will use ceph's pg-upmap-items functionality to
 # quickly modify all PGs which are currently remapped to become
 # active+clean. I use it in combination with the ceph-mgr upmap
@@ -46,6 +49,12 @@ try:
 except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
+
+
+for arg in sys.argv[1:]:
+  if arg == "--ignore-backfilling":
+    eprint ("All actively backfilling PGs will be ignored.")
+    ignore_backfilling = True
 
 def crush_weight(id):
   for o in DF:
@@ -95,7 +104,7 @@ try:
   _remapped = remapped['pg_stats']
   remapped = _remapped
 except KeyError:
-  print("There are no remapped PGs")
+  eprint("There are no remapped PGs")
   sys.exit(0)
 
 # discover existing upmaps
@@ -127,6 +136,10 @@ for pg in remapped:
   if num == 50:
     print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
     num = 0
+
+  if ignore_backfilling:
+    if "backfilling" in pg['state']:
+      continue
 
   pgid = pg['pgid']
 
