@@ -50,7 +50,7 @@ except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
 
-
+ignore_backfilling = False
 for arg in sys.argv[1:]:
   if arg == "--ignore-backfilling":
     eprint ("All actively backfilling PGs will be ignored.")
