@@ -125,7 +125,7 @@ def check_for_pool(pool):
   pools_json = commands.getoutput('ceph osd pool ls --format=json 2>/dev/null')
   pools = json.loads(pools_json)
   if pool not in pools:
-    raise ValueError("Error! Pool '%s' does not exist!" % pool)
+    raise ValueError("Pool '%s' does not exist!" % pool)
 
 def main(argv):
   drain_osds = []
