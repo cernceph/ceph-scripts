@@ -121,6 +121,12 @@ def usage(code=0):
   print 'ceph-gentle-reweight -o <osd>[,<osd>,...] [-l <max_latency (default=20)>] [-b <max pgs backfilling (default=50)>] [-d <delta weight (default=0.01)>] [-t <target weight (default=2)>] [-p <latency test pool (default=test)>] [-i <interval (default=60)>] [-s <start time (default=02:00)>] [-e <end time (default=09:00)>] [-a <day of week,[day of week,...]>]'
   sys.exit(code)
 
+def check_for_pool(pool):
+  pools_json = commands.getoutput('ceph osd pool ls --format=json 2>/dev/null')
+  pools = json.loads(pools_json)
+  if pool not in pools:
+    raise ValueError("Pool '%s' does not exist!" % pool)
+
 def main(argv):
   drain_osds = []
   max_latency = 20
@@ -181,6 +187,8 @@ def main(argv):
   print 'Start time:', start_time
   print 'End time:', end_time
   print 'Allowed days:', allowed_days
+
+  check_for_pool(test_pool)
 
   while(True):
     reweight_osds(drain_osds, max_pgs_backfilling, max_latency, delta_weight, target_weight, test_pool, start_time, end_time, allowed_days, interval, really)
