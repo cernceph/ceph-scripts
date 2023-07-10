@@ -130,11 +130,11 @@ for pg in upmaps:
   has_upmap[pgid] = True
 
 # handle each remapped pg
-print('while ceph status | grep -q "peering\|activating"; do sleep 2; done')
+print('while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
 num = 0
 for pg in remapped:
   if num == 50:
-    print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
+    print('wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
     num = 0
 
   if ignore_backfilling:
@@ -170,4 +170,4 @@ for pg in remapped:
   upmap_pg_items(pgid, pairs)
   num += 1
 
-print('wait; sleep 4; while ceph status | grep -q "peering\|activating"; do sleep 2; done')
+print('wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
