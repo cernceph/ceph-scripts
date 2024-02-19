@@ -10,11 +10,11 @@ def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
 
-osd_dump_json = subprocess.getoutput('ceph osd dump -f json')
+osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
 osd_dump = json.loads(osd_dump_json)
 upmaps = osd_dump['pg_upmap_items']
 
-pgs_json = subprocess.getoutput('ceph pg ls -f json')
+pgs_json = subprocess.getoutput('ceph pg ls -f json | jq -r')
 pgs = json.loads(pgs_json)
 
 cmd_out = subprocess.getoutput('ceph osd crush rule dump -f json | jq -r \'.[] as $k | "\($k.rule_id) \($k.steps[-2].type)"\'')
@@ -26,7 +26,7 @@ for pool in osd_dump['pools']:
   pools[str(pool['pool'])] = pool #pool pool pool
 
 nodes = {}
-for node in json.loads(subprocess.getoutput('ceph osd tree -f json'))['nodes']:
+for node in json.loads(subprocess.getoutput('ceph osd tree -f json | jq -r'))['nodes']:
   if node['id'] in nodes:
     nodes[node['id']].update(node)
   else:
