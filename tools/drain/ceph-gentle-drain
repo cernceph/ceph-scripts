@@ -8,7 +8,6 @@
 
 import sys
 import getopt
-import commands
 import json
 import time
 import subprocess
@@ -16,17 +15,15 @@ import subprocess
 
 def pool_exists(pool):
     cmd = ["ceph", "osd", "pool", "stats", pool]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
+    proc = subprocess.run(cmd, capture_output=True)
     return True if proc.returncode == 0 else False
 
 
 def create_pool(pool):
     cmd = ["ceph", "osd", "pool", "create", pool, "100", "100"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
+    proc = subprocess.run(cmd, capture_output=True)
     if proc.returncode != 0:
-        raise Exception(stderr)
+        raise Exception(proc.stderr)
 
 
 def delete_pool(pool):
@@ -38,10 +35,9 @@ def delete_pool(pool):
     $ ceph osd pool delete <pool> <pool> --yes-i-really-really-mean-it
     """
     cmd = ["ceph", "osd", "pool", "delete", pool]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = proc.communicate()
+    proc = subprocess.run(cmd, capture_output=True)
     if proc.returncode != 0:
-        raise Exception(stderr)
+        raise Exception(proc.stderr)
 
 
 def prepare(bench_pool):
@@ -71,11 +67,10 @@ def cleanup(bench_pool):
 
 def update_osd_tree():
     global osd_tree
-    print "update_osd_tree: loading ceph osd tree"
-    osd_tree_json = commands.getoutput(
-        'ceph osd tree --format=json 2>/dev/null')
-    osd_tree = json.loads(osd_tree_json)
-    print "update_osd_tree: done"
+    print("update_osd_tree: loading ceph osd tree")
+    osd_tree = json.loads(subprocess.check_output(
+        ['ceph', 'osd', 'tree', '--format=json']))
+    print("update_osd_tree: done")
 
 
 def get_crush_weight(osd):
@@ -83,37 +78,36 @@ def get_crush_weight(osd):
     for node in osd_tree['nodes']:
         if node['name'] == osd:
             weight = float(node['crush_weight'])
-            print "get_crush_weight: %s has weight %s" % (osd, weight)
+            print("get_crush_weight: %s has weight %s" % (osd, weight))
             return weight
     raise Exception('Undefined crush_weight for %s' % osd)
 
 
 def measure_latency(pool):
-    print "measure_latency: measuring 4kB write latency"
-    latency = commands.getoutput(
-        "rados -p %s bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'" %
-     pool)
-    latency_ms = 1000*float(latency)
-    print "measure_latency: current latency is %s ms" % latency_ms
+    print("measure_latency: measuring 4kB write latency")
+    cmd = "rados -p %s bench 10 write -t 1 -b 4096 2>/dev/null | egrep -i 'average latency' | awk '{print $3}'" % pool
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=True)
+    latency_ms = 1000*float(proc.stdout)
+    print("measure_latency: current latency is %s ms" % latency_ms)
     return latency_ms
 
 
 def get_num_backfilling():
     cmd = "ceph health detail | grep pg | grep -v stuck | grep backfilling | wc -l"
-    out = commands.getoutput(cmd)
-    n = int(out)
-    print "get_num_backfilling: PGs currently backfilling: %s" % n
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=True)
+    n = int(proc.stdout)
+    print("get_num_backfilling: PGs currently backfilling: %s" % n)
     return n
 
 
 def crush_reweight(osd, weight):
     cmd = "ceph osd crush reweight %s %s" % (osd, weight)
-    print "crush_reweight: calling %s" % cmd
-    out = commands.getoutput(cmd)
-    print "crush_reweight: %s" % out
+    print("crush_reweight: calling %s" % cmd)
+    proc = subprocess.run(cmd, shell=True, capture_output=True, check=True)
+    print("crush_reweight: %s" % proc.stdout)
 
 
-def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight, bench_pool):
+def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight, bench_pool, delta):
 
     # check if there is any work to do:
     update_osd_tree()
@@ -122,43 +116,43 @@ def drain(osds, max_pgs_backfilling, max_latency, max_delta_weight, bench_pool):
         total_weight += get_crush_weight(osd)
 
     if total_weight == 0:
-        print "drain: no work to do, exiting"
+        print("drain: no work to do, exiting")
         cleanup(bench_pool)
         sys.exit(0)
 
-    print "drain: draining total weight %s" % total_weight
+    print("drain: draining total weight %s" % total_weight)
 
     # check num pgs backfilling
     npgs = get_num_backfilling()
     if npgs > max_pgs_backfilling:
-        print "drain: npgs backfilling is too high, trying again later"
+        print("drain: npgs backfilling is too high, trying again later")
         return
 
     # check the latency
     latency = measure_latency(bench_pool)
     if latency > max_latency:
-        print "drain: latency is too high, trying again later"
+        print("drain: latency is too high, trying again later")
         return
 
     total_delta_weight = 0
 
     for osd in osds:
         if total_delta_weight > max_delta_weight:
-            print "drain: reached max delta weight this round: %s" % total_delta_weight
+            print("drain: reached max delta weight this round: %s" % total_delta_weight)
             return
 
         weight = get_crush_weight(osd)
         if weight <= 0:
-            print "drain: skipping %s with weight %s" % (osd, weight)
+            print("drain: skipping %s with weight %s" % (osd, weight))
             continue
 
-        new_weight = 0
-        print "drain: %s new weight will be %s" % (osd, new_weight)
+        new_weight = max(0, weight - delta)
+        print("drain: %s new weight will be %s" % (osd, new_weight))
         crush_reweight(osd, new_weight)
-        total_delta_weight += weight
+        total_delta_weight += delta
 
     if total_delta_weight == 0:
-        print "All done"
+        print("All done")
         cleanup(bench_pool)
         sys.exit(0)
 
@@ -173,6 +167,7 @@ def usage(code=0):
         -b/--backfills <N>             Max PGs backfilling, default 20
         -w/--weight <N>                Max incremental weight, default 2
         --bench-pool <POOL>            Pool used to measure latency, default 'test'
+        -d/--delta <N>                 Delta weight per OSD, default 1
 
         Example:
         ceph-gentle-drain -o osd.0
@@ -186,11 +181,12 @@ def main(argv):
     max_pgs_backfilling = 20
     max_delta_weight = 2
     bench_pool = "test"
+    delta = 1
 
     try:
         opts, args = getopt.getopt(
             argv,
-            "ho:l:b:w:",
+            "ho:l:b:w:d:",
             ["osds=", "latency=", "backfills=", "weight=", "bench-pool="])
     except getopt.GetoptError:
         usage(2)
@@ -206,6 +202,8 @@ def main(argv):
             max_pgs_backfilling = int(arg)
         elif opt in ("-w", "--weight"):
             max_delta_weight = float(arg)
+        elif opt in ("-d", "--delta"):
+            delta = float(arg)
         elif opt in ("--bench-pool"):
             bench_pool = arg
         else:
@@ -226,8 +224,8 @@ def main(argv):
 
     while(True):
         drain(drain_osds, max_pgs_backfilling, max_latency, max_delta_weight,
-              bench_pool)
-        print "main: sleeping 60s"
+              bench_pool, delta)
+        print("main: sleeping 60s")
         time.sleep(60)
 
 if __name__ == "__main__":
