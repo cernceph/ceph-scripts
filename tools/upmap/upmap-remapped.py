@@ -44,7 +44,7 @@ def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
 try:
-  OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r'))
+  OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r .'))
   DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq -r .nodes'))
 except ValueError:
   eprint('Error loading OSD IDs')
@@ -93,7 +93,7 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r')
+  remapped_json = r'{}'.format(subprocess.getoutput('ceph pg ls remapped -f json | jq -r .'))
   remapped = json.loads(remapped_json)
 except ValueError:
   eprint('Error loading remapped pgs')
@@ -108,7 +108,7 @@ except KeyError:
   sys.exit(0)
 
 # discover existing upmaps
-osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
+osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r .')
 osd_dump = json.loads(osd_dump_json)
 upmaps = osd_dump['pg_upmap_items']
 
