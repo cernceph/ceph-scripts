@@ -40,12 +40,31 @@
 
 import json, subprocess, sys
 
+try:
+  import rados
+  cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+  cluster.connect()
+except:
+  use_shell = True
+else:
+  use_shell = False
+
 def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
 try:
-  OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r'))
-  DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq -r .nodes'))
+  if use_shell:
+    OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r'))
+    DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq -r .nodes'))
+  else:
+    cmd = {"prefix": "osd ls", "format": "json"}
+    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+    output = output.decode('utf-8').strip()
+    OSDS = json.loads(output)
+    cmd = {"prefix": "osd df", "format": "json"}
+    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+    output = output.decode('utf-8').strip()
+    DF = json.loads(output)['nodes']
 except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
@@ -93,29 +112,44 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r')
-  remapped = json.loads(remapped_json)
+  if use_shell:
+    remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r')
+  else:
+    cmd = {"prefix": "pg ls", "states": ["remapped"], "format": "json"}
+    ret, output, err = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+    remapped_json = output.decode('utf-8').strip()
+  try:
+    remapped = json.loads(remapped_json)['pg_stats']
+  except KeyError:
+    eprint("There are no remapped PGs")
+    sys.exit(0)
 except ValueError:
   eprint('Error loading remapped pgs')
   sys.exit(1)
 
-# nautilus compat
-try:
-  _remapped = remapped['pg_stats']
-  remapped = _remapped
-except KeyError:
-  eprint("There are no remapped PGs")
-  sys.exit(0)
-
 # discover existing upmaps
-osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
-osd_dump = json.loads(osd_dump_json)
-upmaps = osd_dump['pg_upmap_items']
+try:
+  if use_shell:
+    osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
+  else:
+    cmd = {"prefix": "osd dump", "format": "json"}
+    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+    osd_dump_json = output.decode('utf-8').strip()
+  upmaps = json.loads(osd_dump_json)['pg_upmap_items']
+except ValueError:
+  eprint('Error loading existing upmaps')
+  sys.exit(1)
 
 # discover pools replicated or erasure
 pool_type = {}
 try:
-  for line in subprocess.getoutput('ceph osd pool ls detail').split('\n'):
+  if use_shell:
+    osd_pool_ls_detail =  subprocess.getoutput('ceph osd pool ls detail')
+  else:
+    cmd = {"prefix": "osd pool ls", "detail": "detail", "format": "plain"}
+    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
+    osd_pool_ls_detail = output.decode('utf-8').strip()
+  for line in osd_pool_ls_detail.split('\n'):
     if 'pool' in line:
       x = line.split(' ')
       pool_type[x[1]] = x[3]
@@ -171,3 +205,4 @@ for pg in remapped:
   num += 1
 
 print('wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
+cluster.shutdown()
