@@ -54,7 +54,7 @@ def eprint(*args, **kwargs):
 
 try:
   if use_shell:
-    OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r'))
+    OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r .'))
     DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq -r .nodes'))
   else:
     cmd = {"prefix": "osd ls", "format": "json"}
@@ -113,7 +113,7 @@ def rm_upmap_pg_items(pgid):
 # discover remapped pgs
 try:
   if use_shell:
-    remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r')
+    remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r .')
   else:
     cmd = {"prefix": "pg ls", "states": ["remapped"], "format": "json"}
     ret, output, err = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
@@ -130,7 +130,7 @@ except ValueError:
 # discover existing upmaps
 try:
   if use_shell:
-    osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
+    osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r .')
   else:
     cmd = {"prefix": "osd dump", "format": "json"}
     ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
