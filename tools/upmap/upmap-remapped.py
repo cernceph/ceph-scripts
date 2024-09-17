@@ -108,7 +108,7 @@ except KeyError:
   sys.exit(0)
 
 # discover existing upmaps
-osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r')
+osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r \'walk(if type == "object" then del(.score_acting, .score_stable) else . end)\'')
 osd_dump = json.loads(osd_dump_json)
 upmaps = osd_dump['pg_upmap_items']
 
