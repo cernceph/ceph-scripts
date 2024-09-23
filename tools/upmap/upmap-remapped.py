@@ -64,10 +64,9 @@ def crush_weight(id):
 
 def gen_upmap(up, acting, replicated=False):
   assert(len(up) == len(acting))
-  mappings = []
-  for p in zip(up, acting):
-    if p[0] != p[1] and p[0] in OSDS and crush_weight(p[1]) > 0:
-      mappings.append(p)
+
+  # Create mappings needed to make the PG clean
+  mappings = [(u, a) for u, a in zip(up, acting) if u != a and u in OSDS and crush_weight(a) > 0]
 
   # if replicated, remove indirect mappings
   # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804 804 530 &
