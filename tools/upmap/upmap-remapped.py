@@ -64,19 +64,43 @@ def crush_weight(id):
 
 def gen_upmap(up, acting, replicated=False):
   assert(len(up) == len(acting))
-  pairs = []
-  for p in zip(up, acting):
-    if p[0] != p[1] and p[0] in OSDS and crush_weight(p[1]) > 0:
-      pairs.append(p)
 
-  # if replicated, remove indirect mappings
+  # Create mappings needed to make the PG clean
+  mappings = [(u, a) for u, a in zip(up, acting) if u != a and u in OSDS and crush_weight(a) > 0]
+
+  # Remove indirect mappings on replicated pools
   # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804 804 530 &
   if replicated:
-    p = list(pairs)
+    p = list(mappings)
     u = set([x[0] for x in p])
     a = set([x[1] for x in p])
-    pairs = list(zip(u-a, a-u))
-  return pairs
+    mappings = list(zip(u-a, a-u))
+  # Order the mappings on erasure-coded pools so that data is moved off an osd
+  # before it is moved on to it.
+  # e.g. ceph osd pg-upmap-items 15.c9 714 803 929 714
+  else:
+    # Handle the situation where the src and dst of one mapping matches the dst
+    # and src of another.  Example: (314, 272) & (272, 314)
+    for (x, y) in mappings:
+      if (y, x) in mappings:
+        mappings.remove((x, y))
+        mappings.remove((y, x))
+
+    # Do multiple passes of a modified bubble sort to order the mappings so that
+    # data is moved off an OSD before it is moved on to it.  Stop when no
+    # mappings are swapped.
+    while True:
+      swapped = False
+      for i in range(len(mappings)-1):
+        for j in range(i+1, len(mappings)):
+          if mappings[j][0] == mappings[i][1] and mappings[j][1] != mappings[i][0]:
+            mappings[i], mappings[j] = mappings[j], mappings[i]
+            swapped = True
+
+      if not swapped:
+        break
+
+  return mappings
 
 def upmap_pg_items(pgid, mapping):
   if len(mapping):
