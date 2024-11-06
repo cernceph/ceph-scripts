@@ -38,7 +38,7 @@
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
 
-import json, subprocess, sys
+import json, subprocess, sys, re
 
 try:
   import rados
@@ -159,6 +159,7 @@ try:
     cmd = {"prefix": "osd dump", "format": "json"}
     ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
     osd_dump_json = output.decode('utf-8').strip()
+  osd_dump_json = re.sub(r':\s*inf\b', ': "inf"', osd_dump_json)
   upmaps = json.loads(osd_dump_json)['pg_upmap_items']
 except ValueError:
   eprint('Error loading existing upmaps')
