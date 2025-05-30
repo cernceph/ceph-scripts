@@ -40,6 +40,10 @@
 
 import json, subprocess, sys
 
+def get_command_output(command):
+  result = subprocess.run(command, capture_output=True, universal_newlines=True, check=True, shell=True)
+  return result.stdout
+
 try:
   import rados
   cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
@@ -54,8 +58,8 @@ def eprint(*args, **kwargs):
 
 try:
   if use_shell:
-    OSDS = json.loads(subprocess.getoutput('ceph osd ls -f json | jq -r .'))
-    DF = json.loads(subprocess.getoutput('ceph osd df -f json | jq -r .nodes'))
+    OSDS = json.loads(get_command_output('ceph osd ls -f json | jq -r .'))
+    DF = json.loads(get_command_output('ceph osd df -f json | jq -r .nodes'))
   else:
     cmd = {"prefix": "osd ls", "format": "json"}
     ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
@@ -137,7 +141,7 @@ def rm_upmap_pg_items(pgid):
 # discover remapped pgs
 try:
   if use_shell:
-    remapped_json = subprocess.getoutput('ceph pg ls remapped -f json | jq -r .')
+    remapped_json = get_command_output('ceph pg ls remapped -f json | jq -r .')
   else:
     cmd = {"prefix": "pg ls", "states": ["remapped"], "format": "json"}
     ret, output, err = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
@@ -154,7 +158,7 @@ except ValueError:
 # discover existing upmaps
 try:
   if use_shell:
-    osd_dump_json = subprocess.getoutput('ceph osd dump -f json | jq -r .')
+    osd_dump_json = get_command_output('ceph osd dump -f json | jq -r .')
   else:
     cmd = {"prefix": "osd dump", "format": "json"}
     ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
@@ -168,7 +172,7 @@ except ValueError:
 pool_type = {}
 try:
   if use_shell:
-    osd_pool_ls_detail =  subprocess.getoutput('ceph osd pool ls detail')
+    osd_pool_ls_detail = get_command_output('ceph osd pool ls detail')
   else:
     cmd = {"prefix": "osd pool ls", "detail": "detail", "format": "plain"}
     ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
