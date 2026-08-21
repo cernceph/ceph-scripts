@@ -88,42 +88,56 @@ def crush_weight(id):
 def gen_upmap(up, acting, replicated=False):
   assert(len(up) == len(acting))
 
-  # Create mappings needed to make the PG clean
+  # On replicated pools only the set of osds matters, so vacate the osds which do
+  # not belong in the pg and fill it with the ones which are missing from it.
+  # This never maps onto an osd which is already in the up set, which the mon
+  # would ignore.
+  # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804
+  if replicated:
+    sources = [u for u in up if u not in acting and u in OSDS]
+    dests = [a for a in acting if a not in up and crush_weight(a) > 0]
+    return list(zip(sources, dests))
+
+  # On erasure-coded pools every position in the up set matters, so the mappings
+  # have to be positional.  Only keep the ones we are allowed to make.
   mappings = [(u, a) for u, a in zip(up, acting) if u != a and u in OSDS and crush_weight(a) > 0]
 
-  # Remove indirect mappings on replicated pools
-  # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804 804 530 &
-  if replicated:
-    p = list(mappings)
-    u = set([x[0] for x in p])
-    a = set([x[1] for x in p])
-    mappings = list(zip(u-a, a-u))
+  # Dropping a mapping above leaves its osd in the up set, and mapping onto an
+  # osd which is staying in the up set asks for the same osd twice, which the mon
+  # ignores.  Drop those mappings too, repeating until nothing changes.
+  while True:
+    staying = set(up) - set(u for u, a in mappings)
+    keep = [(u, a) for u, a in mappings if a not in staying]
+    if len(keep) == len(mappings):
+      break
+    mappings = keep
+
   # Order the mappings on erasure-coded pools so that data is moved off an osd
   # before it is moved on to it.
   # e.g. ceph osd pg-upmap-items 15.c9 714 803 929 714
-  else:
-    # Handle the situation where the src and dst of one mapping matches the dst
-    # and src of another.  Example: (314, 272) & (272, 314)
-    for (x, y) in mappings:
-      if (y, x) in mappings:
-        mappings.remove((x, y))
-        mappings.remove((y, x))
+  # Each osd is used at most once as a source and once as a destination, so the
+  # mappings form chains and cycles.  Emit each chain in order.  A cycle, such as
+  # (314, 272) & (272, 314) or 1 -> 2 -> 3 -> 1, has no valid order, so leave
+  # those mappings out and let the pg stay remapped.
+  by_source = dict((u, (u, a)) for u, a in mappings)
+  ordered = []
+  placed = set()
+  for m in mappings:
+    if m in placed:
+      continue
+    # walk back over the mappings which have to be done before this one
+    chain = []
+    n = m
+    while n is not None and n not in placed and n not in chain:
+      chain.append(n)
+      n = by_source.get(n[1])
+    placed.update(chain)
+    if n in chain:
+      continue
+    chain.reverse()
+    ordered.extend(chain)
 
-    # Do multiple passes of a modified bubble sort to order the mappings so that
-    # data is moved off an OSD before it is moved on to it.  Stop when no
-    # mappings are swapped.
-    while True:
-      swapped = False
-      for i in range(len(mappings)-1):
-        for j in range(i+1, len(mappings)):
-          if mappings[j][0] == mappings[i][1] and mappings[j][1] != mappings[i][0]:
-            mappings[i], mappings[j] = mappings[j], mappings[i]
-            swapped = True
-
-      if not swapped:
-        break
-
-  return mappings
+  return ordered
 
 def upmap_pg_items(pgid, mapping):
   if len(mapping):
