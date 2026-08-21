@@ -56,19 +56,19 @@ else:
 def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
-try:
+def get_cluster_output(shell_command, mon_command):
+  """Run a command through librados if it is available, else through the shell,
+  and return its output."""
   if use_shell:
-    OSDS = json.loads(get_command_output('ceph osd ls -f json | jq -r .'))
-    DF = json.loads(get_command_output('ceph osd df -f json | jq -r .nodes'))
-  else:
-    cmd = {"prefix": "osd ls", "format": "json"}
-    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
-    output = output.decode('utf-8').strip()
-    OSDS = json.loads(output)
-    cmd = {"prefix": "osd df", "format": "json"}
-    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
-    output = output.decode('utf-8').strip()
-    DF = json.loads(output)['nodes']
+    return get_command_output(shell_command)
+  ret, output, errs = cluster.mon_command(json.dumps(mon_command), b'', timeout=5)
+  return output.decode('utf-8').strip()
+
+try:
+  OSDS = json.loads(get_cluster_output('ceph osd ls -f json | jq -r .',
+                                       {"prefix": "osd ls", "format": "json"}))
+  DF = json.loads(get_cluster_output('ceph osd df -f json | jq -r .',
+                                     {"prefix": "osd df", "format": "json"}))['nodes']
 except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
@@ -154,12 +154,8 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  if use_shell:
-    remapped_json = get_command_output('ceph pg ls remapped -f json | jq -r .')
-  else:
-    cmd = {"prefix": "pg ls", "states": ["remapped"], "format": "json"}
-    ret, output, err = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
-    remapped_json = output.decode('utf-8').strip()
+  remapped_json = get_cluster_output('ceph pg ls remapped -f json | jq -r .',
+                                     {"prefix": "pg ls", "states": ["remapped"], "format": "json"})
   try:
     remapped = json.loads(remapped_json)['pg_stats']
   except KeyError:
@@ -171,12 +167,8 @@ except ValueError:
 
 # discover existing upmaps
 try:
-  if use_shell:
-    osd_dump_json = get_command_output('ceph osd dump -f json | jq -r .')
-  else:
-    cmd = {"prefix": "osd dump", "format": "json"}
-    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
-    osd_dump_json = output.decode('utf-8').strip()
+  osd_dump_json = get_cluster_output('ceph osd dump -f json | jq -r .',
+                                     {"prefix": "osd dump", "format": "json"})
   upmaps = json.loads(osd_dump_json)['pg_upmap_items']
 except ValueError:
   eprint('Error loading existing upmaps')
@@ -185,12 +177,8 @@ except ValueError:
 # discover pools replicated or erasure
 pool_type = {}
 try:
-  if use_shell:
-    osd_pool_ls_detail = get_command_output('ceph osd pool ls detail')
-  else:
-    cmd = {"prefix": "osd pool ls", "detail": "detail", "format": "plain"}
-    ret, output, errs = cluster.mon_command(json.dumps(cmd), b'', timeout=5)
-    osd_pool_ls_detail = output.decode('utf-8').strip()
+  osd_pool_ls_detail = get_cluster_output('ceph osd pool ls detail',
+                                          {"prefix": "osd pool ls", "detail": "detail", "format": "plain"})
   for line in osd_pool_ls_detail.split('\n'):
     if 'pool' in line:
       x = line.split(' ')
