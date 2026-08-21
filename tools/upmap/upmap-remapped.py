@@ -52,7 +52,7 @@ try:
   import rados
   cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
   cluster.connect()
-except:
+except Exception:
   use_shell = True
 else:
   use_shell = False
@@ -99,7 +99,10 @@ def crush_weight(id):
   return 0
 
 def gen_upmap(up, acting, replicated=False):
-  assert(len(up) == len(acting))
+  # a pg which is degraded as well as remapped can report an acting set of a
+  # different length, and there is nothing useful to do with those
+  if len(up) != len(acting):
+    return []
 
   # On replicated pools only the set of osds matters, so vacate the osds which do
   # not belong in the pg and fill it with the ones which are missing from it.
@@ -196,7 +199,7 @@ try:
     if line.startswith('pool '):
       x = line.split(' ')
       pool_type[x[1]] = x[3]
-except:
+except IndexError:
   eprint('Error parsing pool types')
   sys.exit(1)
 
@@ -231,11 +234,8 @@ for pg in remapped:
     eprint('Unknown pool type for %s' % pool)
     sys.exit(1)
 
-  try:
-    pairs = gen_upmap(pg['up'], pg['acting'],
-                      replicated=(pool_type[pool] == 'replicated'))
-  except:
-    continue
+  pairs = gen_upmap(pg['up'], pg['acting'],
+                    replicated=(pool_type[pool] == 'replicated'))
   upmap_pg_items(pgid, pairs)
   num += 1
 
