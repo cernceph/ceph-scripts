@@ -201,10 +201,7 @@ except:
   sys.exit(1)
 
 # discover if each pg is already upmapped
-has_upmap = {}
-for pg in upmaps:
-  pgid = str(pg['pgid'])
-  has_upmap[pgid] = True
+has_upmap = set(str(pg['pgid']) for pg in upmaps)
 
 # handle each remapped pg
 print(r'while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
@@ -220,34 +217,25 @@ for pg in remapped:
 
   pgid = pg['pgid']
 
-  try:
-    if has_upmap[pgid]:
-      rm_upmap_pg_items(pgid)
-      num += 1
-      continue
-  except KeyError:
-    pass
+  if pgid in has_upmap:
+    rm_upmap_pg_items(pgid)
+    num += 1
+    continue
 
-  up = pg['up']
-  acting = pg['acting']
   pool = pgid.split('.')[0]
   if pool not in pool_type:
     # the pool was deleted between reading the pgs and reading the pools
     eprint('Skipping pg %s of unknown pool %s' % (pgid, pool))
     continue
-  if pool_type[pool] == 'replicated':
-    try:
-      pairs = gen_upmap(up, acting, replicated=True)
-    except:
-      continue
-  elif pool_type[pool] == 'erasure':
-    try:
-      pairs = gen_upmap(up, acting)
-    except:
-      continue
-  else:
+  if pool_type[pool] not in ('replicated', 'erasure'):
     eprint('Unknown pool type for %s' % pool)
     sys.exit(1)
+
+  try:
+    pairs = gen_upmap(pg['up'], pg['acting'],
+                      replicated=(pool_type[pool] == 'replicated'))
+  except:
+    continue
   upmap_pg_items(pgid, pairs)
   num += 1
 
