@@ -78,13 +78,17 @@ def get_cluster_output(shell_command, mon_command):
   return output.decode('utf-8').strip()
 
 try:
-  OSDS = json.loads(get_cluster_output('ceph osd ls -f json',
-                                       {"prefix": "osd ls", "format": "json"}))
+  OSDS = set(json.loads(get_cluster_output('ceph osd ls -f json',
+                                           {"prefix": "osd ls", "format": "json"})))
   DF = json.loads(get_cluster_output('ceph osd df -f json',
                                      {"prefix": "osd df", "format": "json"}))['nodes']
 except ValueError:
   eprint('Error loading OSD IDs')
   sys.exit(1)
+
+# the weight each osd effectively has, indexed by osd id: gen_upmap() asks about
+# this for every shard of every remapped pg
+WEIGHT = dict((o['id'], o['crush_weight'] * o['reweight']) for o in DF)
 
 ignore_backfilling = False
 for arg in sys.argv[1:]:
@@ -93,10 +97,7 @@ for arg in sys.argv[1:]:
     ignore_backfilling = True
 
 def crush_weight(id):
-  for o in DF:
-    if o['id'] == id:
-      return o['crush_weight'] * o['reweight']
-  return 0
+  return WEIGHT.get(id, 0)
 
 def gen_upmap(up, acting, replicated=False):
   # a pg which is degraded as well as remapped can report an acting set of a
