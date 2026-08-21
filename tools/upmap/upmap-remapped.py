@@ -40,6 +40,10 @@
 
 import json, subprocess, sys
 
+# How long to wait for a mon command.  'pg ls' and 'osd dump' can take a while
+# on a large cluster with many remapped pgs.
+MON_TIMEOUT = 300
+
 def get_command_output(command):
   result = subprocess.run(command, capture_output=True, universal_newlines=True, check=True, shell=True)
   return result.stdout
@@ -58,13 +62,18 @@ def eprint(*args, **kwargs):
 
 def get_cluster_output(shell_command, mon_command):
   """Run a command through librados if it is available, else through the shell,
-  and return its output."""
-  if use_shell:
-    return get_command_output(shell_command)
-  ret, output, errs = cluster.mon_command(json.dumps(mon_command), b'', timeout=5)
+  and return its output.  Exits if the command fails."""
+  try:
+    if use_shell:
+      return get_command_output(shell_command)
+    ret, output, errs = cluster.mon_command(json.dumps(mon_command), b'',
+                                            timeout=MON_TIMEOUT)
+  except Exception as e:
+    eprint('Error running "%s": %s' % (shell_command, e))
+    sys.exit(1)
   if ret != 0:
-    eprint('Error running "ceph %s": %s'
-           % (mon_command['prefix'], errs.strip() or 'returned %d' % ret))
+    eprint('Error running "%s": %s'
+           % (shell_command, errs.strip() or 'returned %d' % ret))
     sys.exit(1)
   return output.decode('utf-8').strip()
 
