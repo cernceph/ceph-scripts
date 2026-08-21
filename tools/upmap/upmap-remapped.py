@@ -38,7 +38,7 @@
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
 
-import json, subprocess, sys
+import argparse, json, subprocess, sys
 
 # How long to wait for a mon command.  'pg ls' and 'osd dump' can take a while
 # on a large cluster with many remapped pgs.
@@ -48,6 +48,19 @@ def get_command_output(command):
   result = subprocess.run(command, capture_output=True, universal_newlines=True, check=True, shell=True)
   return result.stdout
 
+def eprint(*args, **kwargs):
+  print(*args, file=sys.stderr, **kwargs)
+
+parser = argparse.ArgumentParser(
+  description='Print the ceph commands which make every remapped pg '
+              'active+clean again.  Pipe the output into sh to run them.')
+parser.add_argument('--ignore-backfilling', action='store_true',
+                    help='leave the pgs which are already backfilling alone, '
+                         'instead of interrupting them')
+options = parser.parse_args()
+if options.ignore_backfilling:
+  eprint('All actively backfilling PGs will be ignored.')
+
 try:
   import rados
   cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
@@ -56,9 +69,6 @@ except Exception:
   use_shell = True
 else:
   use_shell = False
-
-def eprint(*args, **kwargs):
-  print(*args, file=sys.stderr, **kwargs)
 
 def get_cluster_output(shell_command, mon_command):
   """Run a command through librados if it is available, else through the shell,
@@ -89,12 +99,6 @@ except ValueError:
 # the weight each osd effectively has, indexed by osd id: gen_upmap() asks about
 # this for every shard of every remapped pg
 WEIGHT = dict((o['id'], o['crush_weight'] * o['reweight']) for o in DF)
-
-ignore_backfilling = False
-for arg in sys.argv[1:]:
-  if arg == "--ignore-backfilling":
-    eprint ("All actively backfilling PGs will be ignored.")
-    ignore_backfilling = True
 
 def crush_weight(id):
   return WEIGHT.get(id, 0)
@@ -215,9 +219,8 @@ for pg in remapped:
     print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
     num = 0
 
-  if ignore_backfilling:
-    if "backfilling" in pg['state']:
-      continue
+  if options.ignore_backfilling and "backfilling" in pg['state']:
+    continue
 
   pgid = pg['pgid']
 
