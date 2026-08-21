@@ -65,9 +65,9 @@ def get_cluster_output(shell_command, mon_command):
   return output.decode('utf-8').strip()
 
 try:
-  OSDS = json.loads(get_cluster_output('ceph osd ls -f json | jq -r .',
+  OSDS = json.loads(get_cluster_output('ceph osd ls -f json',
                                        {"prefix": "osd ls", "format": "json"}))
-  DF = json.loads(get_cluster_output('ceph osd df -f json | jq -r .',
+  DF = json.loads(get_cluster_output('ceph osd df -f json',
                                      {"prefix": "osd df", "format": "json"}))['nodes']
 except ValueError:
   eprint('Error loading OSD IDs')
@@ -154,7 +154,7 @@ def rm_upmap_pg_items(pgid):
 
 # discover remapped pgs
 try:
-  remapped_json = get_cluster_output('ceph pg ls remapped -f json | jq -r .',
+  remapped_json = get_cluster_output('ceph pg ls remapped -f json',
                                      {"prefix": "pg ls", "states": ["remapped"], "format": "json"})
   try:
     remapped = json.loads(remapped_json)['pg_stats']
@@ -167,7 +167,7 @@ except ValueError:
 
 # discover existing upmaps
 try:
-  osd_dump_json = get_cluster_output('ceph osd dump -f json | jq -r .',
+  osd_dump_json = get_cluster_output('ceph osd dump -f json',
                                      {"prefix": "osd dump", "format": "json"})
   upmaps = json.loads(osd_dump_json)['pg_upmap_items']
 except ValueError:
