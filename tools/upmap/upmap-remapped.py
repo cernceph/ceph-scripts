@@ -38,7 +38,7 @@
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
 
-import argparse, json, subprocess, sys
+import argparse, atexit, json, subprocess, sys
 
 # How long to wait for a mon command.  'pg ls' and 'osd dump' can take a while
 # on a large cluster with many remapped pgs.
@@ -69,6 +69,8 @@ except Exception:
   use_shell = True
 else:
   use_shell = False
+  # every exit from here on should close the connection, not just the last one
+  atexit.register(cluster.shutdown)
 
 def get_cluster_output(shell_command, mon_command):
   """Run a command through librados if it is available, else through the shell,
@@ -244,6 +246,3 @@ for pg in remapped:
   num += 1
 
 print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
-
-if not use_shell:
-  cluster.shutdown()
