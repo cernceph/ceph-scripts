@@ -62,6 +62,10 @@ def get_cluster_output(shell_command, mon_command):
   if use_shell:
     return get_command_output(shell_command)
   ret, output, errs = cluster.mon_command(json.dumps(mon_command), b'', timeout=5)
+  if ret != 0:
+    eprint('Error running "ceph %s": %s'
+           % (mon_command['prefix'], errs.strip() or 'returned %d' % ret))
+    sys.exit(1)
   return output.decode('utf-8').strip()
 
 try:
