@@ -193,7 +193,7 @@ try:
   osd_pool_ls_detail = get_cluster_output('ceph osd pool ls detail',
                                           {"prefix": "osd pool ls", "detail": "detail", "format": "plain"})
   for line in osd_pool_ls_detail.split('\n'):
-    if 'pool' in line:
+    if line.startswith('pool '):
       x = line.split(' ')
       pool_type[x[1]] = x[3]
 except:
