@@ -231,6 +231,10 @@ for pg in remapped:
   up = pg['up']
   acting = pg['acting']
   pool = pgid.split('.')[0]
+  if pool not in pool_type:
+    # the pool was deleted between reading the pgs and reading the pools
+    eprint('Skipping pg %s of unknown pool %s' % (pgid, pool))
+    continue
   if pool_type[pool] == 'replicated':
     try:
       pairs = gen_upmap(up, acting, replicated=True)
