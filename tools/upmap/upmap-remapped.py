@@ -44,6 +44,13 @@ import argparse, atexit, json, subprocess, sys
 # on a large cluster with many remapped pgs.
 MON_TIMEOUT = 300
 
+# The cluster state every function below works from.  main() fills it in; the
+# tests set it directly.
+OSDS = set()      # the osds which exist, from 'osd ls'
+WEIGHT = {}       # osd id -> the weight it effectively has, from 'osd df'
+cluster = None    # the librados connection, or None when using the shell
+use_shell = True
+
 def get_command_output(command):
   result = subprocess.run(command, capture_output=True, universal_newlines=True, check=True, shell=True)
   return result.stdout
@@ -51,26 +58,29 @@ def get_command_output(command):
 def eprint(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
 
-parser = argparse.ArgumentParser(
-  description='Print the ceph commands which make every remapped pg '
-              'active+clean again.  Pipe the output into sh to run them.')
-parser.add_argument('--ignore-backfilling', action='store_true',
-                    help='leave the pgs which are already backfilling alone, '
-                         'instead of interrupting them')
-options = parser.parse_args()
-if options.ignore_backfilling:
-  eprint('All actively backfilling PGs will be ignored.')
+def parse_args():
+  parser = argparse.ArgumentParser(
+    description='Print the ceph commands which make every remapped pg '
+                'active+clean again.  Pipe the output into sh to run them.')
+  parser.add_argument('--ignore-backfilling', action='store_true',
+                      help='leave the pgs which are already backfilling alone, '
+                           'instead of interrupting them')
+  return parser.parse_args()
 
-try:
-  import rados
-  cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
-  cluster.connect()
-except Exception:
-  use_shell = True
-else:
-  use_shell = False
-  # every exit from here on should close the connection, not just the last one
-  atexit.register(cluster.shutdown)
+def connect():
+  """Talk to the cluster through librados when it is available, and fall back to
+  running the ceph cli in a shell when it is not."""
+  global cluster, use_shell
+  try:
+    import rados
+    cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+    cluster.connect()
+  except Exception:
+    use_shell = True
+  else:
+    use_shell = False
+    # every exit from here on should close the connection, not just the last one
+    atexit.register(cluster.shutdown)
 
 def get_cluster_output(shell_command, mon_command):
   """Run a command through librados if it is available, else through the shell,
@@ -89,18 +99,19 @@ def get_cluster_output(shell_command, mon_command):
     sys.exit(1)
   return output.decode('utf-8').strip()
 
-try:
-  OSDS = set(json.loads(get_cluster_output('ceph osd ls -f json',
-                                           {"prefix": "osd ls", "format": "json"})))
-  DF = json.loads(get_cluster_output('ceph osd df -f json',
-                                     {"prefix": "osd df", "format": "json"}))['nodes']
-except ValueError:
-  eprint('Error loading OSD IDs')
-  sys.exit(1)
-
-# the weight each osd effectively has, indexed by osd id: gen_upmap() asks about
-# this for every shard of every remapped pg
-WEIGHT = dict((o['id'], o['crush_weight'] * o['reweight']) for o in DF)
+def load_osds():
+  """Read the osds which exist and the weight each of them effectively has."""
+  global OSDS, WEIGHT
+  try:
+    OSDS = set(json.loads(get_cluster_output('ceph osd ls -f json',
+                                             {"prefix": "osd ls", "format": "json"})))
+    DF = json.loads(get_cluster_output('ceph osd df -f json',
+                                       {"prefix": "osd df", "format": "json"}))['nodes']
+  except ValueError:
+    eprint('Error loading OSD IDs')
+    sys.exit(1)
+  # gen_upmap() asks about this for every shard of every remapped pg
+  WEIGHT = dict((o['id'], o['crush_weight'] * o['reweight']) for o in DF)
 
 def crush_weight(id):
   return WEIGHT.get(id, 0)
@@ -172,77 +183,85 @@ def upmap_pg_items(pgid, mapping):
 def rm_upmap_pg_items(pgid):
   print('ceph osd rm-pg-upmap-items %s &' % pgid)
 
+def main():
+  options = parse_args()
+  if options.ignore_backfilling:
+    eprint('All actively backfilling PGs will be ignored.')
 
-# start here
+  connect()
+  load_osds()
 
-# discover remapped pgs
-try:
-  remapped_json = get_cluster_output('ceph pg ls remapped -f json',
-                                     {"prefix": "pg ls", "states": ["remapped"], "format": "json"})
+  # discover remapped pgs
   try:
-    remapped = json.loads(remapped_json)['pg_stats']
-  except KeyError:
-    eprint("There are no remapped PGs")
-    sys.exit(0)
-except ValueError:
-  eprint('Error loading remapped pgs')
-  sys.exit(1)
-
-# discover existing upmaps
-try:
-  osd_dump_json = get_cluster_output('ceph osd dump -f json',
-                                     {"prefix": "osd dump", "format": "json"})
-  upmaps = json.loads(osd_dump_json)['pg_upmap_items']
-except ValueError:
-  eprint('Error loading existing upmaps')
-  sys.exit(1)
-
-# discover pools replicated or erasure
-pool_type = {}
-try:
-  osd_pool_ls_detail = get_cluster_output('ceph osd pool ls detail',
-                                          {"prefix": "osd pool ls", "detail": "detail", "format": "plain"})
-  for line in osd_pool_ls_detail.split('\n'):
-    if line.startswith('pool '):
-      x = line.split(' ')
-      pool_type[x[1]] = x[3]
-except IndexError:
-  eprint('Error parsing pool types')
-  sys.exit(1)
-
-# discover if each pg is already upmapped
-has_upmap = set(str(pg['pgid']) for pg in upmaps)
-
-# handle each remapped pg
-print(r'while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
-num = 0
-for pg in remapped:
-  if num == 50:
-    print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
-    num = 0
-
-  if options.ignore_backfilling and "backfilling" in pg['state']:
-    continue
-
-  pgid = pg['pgid']
-
-  if pgid in has_upmap:
-    rm_upmap_pg_items(pgid)
-    num += 1
-    continue
-
-  pool = pgid.split('.')[0]
-  if pool not in pool_type:
-    # the pool was deleted between reading the pgs and reading the pools
-    eprint('Skipping pg %s of unknown pool %s' % (pgid, pool))
-    continue
-  if pool_type[pool] not in ('replicated', 'erasure'):
-    eprint('Unknown pool type for %s' % pool)
+    remapped_json = get_cluster_output('ceph pg ls remapped -f json',
+                                       {"prefix": "pg ls", "states": ["remapped"], "format": "json"})
+    try:
+      remapped = json.loads(remapped_json)['pg_stats']
+    except KeyError:
+      eprint("There are no remapped PGs")
+      sys.exit(0)
+  except ValueError:
+    eprint('Error loading remapped pgs')
     sys.exit(1)
 
-  pairs = gen_upmap(pg['up'], pg['acting'],
-                    replicated=(pool_type[pool] == 'replicated'))
-  upmap_pg_items(pgid, pairs)
-  num += 1
+  # discover existing upmaps
+  try:
+    osd_dump_json = get_cluster_output('ceph osd dump -f json',
+                                       {"prefix": "osd dump", "format": "json"})
+    upmaps = json.loads(osd_dump_json)['pg_upmap_items']
+  except ValueError:
+    eprint('Error loading existing upmaps')
+    sys.exit(1)
 
-print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
+  # discover pools replicated or erasure
+  pool_type = {}
+  try:
+    osd_pool_ls_detail = get_cluster_output('ceph osd pool ls detail',
+                                            {"prefix": "osd pool ls", "detail": "detail", "format": "plain"})
+    for line in osd_pool_ls_detail.split('\n'):
+      if line.startswith('pool '):
+        x = line.split(' ')
+        pool_type[x[1]] = x[3]
+  except IndexError:
+    eprint('Error parsing pool types')
+    sys.exit(1)
+
+  # discover if each pg is already upmapped
+  has_upmap = set(str(pg['pgid']) for pg in upmaps)
+
+  # handle each remapped pg
+  print(r'while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
+  num = 0
+  for pg in remapped:
+    if num == 50:
+      print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
+      num = 0
+
+    if options.ignore_backfilling and "backfilling" in pg['state']:
+      continue
+
+    pgid = pg['pgid']
+
+    if pgid in has_upmap:
+      rm_upmap_pg_items(pgid)
+      num += 1
+      continue
+
+    pool = pgid.split('.')[0]
+    if pool not in pool_type:
+      # the pool was deleted between reading the pgs and reading the pools
+      eprint('Skipping pg %s of unknown pool %s' % (pgid, pool))
+      continue
+    if pool_type[pool] not in ('replicated', 'erasure'):
+      eprint('Unknown pool type for %s' % pool)
+      sys.exit(1)
+
+    pairs = gen_upmap(pg['up'], pg['acting'],
+                      replicated=(pool_type[pool] == 'replicated'))
+    upmap_pg_items(pgid, pairs)
+    num += 1
+
+  print(r'wait; sleep 4; while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
+
+if __name__ == '__main__':
+  main()
