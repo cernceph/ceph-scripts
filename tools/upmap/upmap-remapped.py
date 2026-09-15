@@ -196,7 +196,34 @@ def spread(pgid, position, salt=0):
     seed = 0
   return (seed * 2654435761 + position * 40503 + salt * 7) & 0xffffffff
 
-def pick_target(pgid, up, acting, domain_type):
+def rotations(up, target):
+  """The positions of an erasure-coded pg whose mapping is part of a rotation.
+
+  The mon applies pg-upmap-items one pair after the other and ignores a pair
+  whose destination is still in the pg, so the pair which vacates a position has
+  to come before the pair which fills it again.  When those dependencies form a
+  cycle - two osds trading places, or a longer rotation - no order of the pairs
+  expresses it and gen_upmap() has to drop them."""
+  moving = [i for i in range(len(up)) if up[i] != target[i]]
+  position_of = dict((up[i], i) for i in moving)
+  # the mapping at position i can only be applied after the one at needs[i]
+  needs = dict((i, position_of.get(target[i])) for i in moving)
+  done = {}
+  cycled = set()
+  for start in moving:
+    path = []
+    i = start
+    while i is not None and i not in done:
+      done[i] = False
+      path.append(i)
+      i = needs.get(i)
+    if i is not None and done[i] is False:
+      cycled.update(path[path.index(i):])
+    for j in path:
+      done[j] = True
+  return sorted(cycled)
+
+def pick_target(pgid, up, acting, domain_type, replicated=False):
   """The osds to map this pg onto, in the positions to map them into.
 
   This is the acting set whenever the acting set is something the pg is allowed
@@ -253,6 +280,35 @@ def pick_target(pgid, up, acting, domain_type):
     osds = bucket_osds[bucket]
     wanted = [o for o in osds if o in up]   # a shard crush wanted here anyway
     target[i] = wanted[0] if wanted else osds[spread(pgid, i, 1) % len(osds)]
+
+  # Only the set of osds matters on a replicated pool, so its mappings never
+  # form a rotation.
+  if replicated:
+    return target
+
+  # Keeping the acting osds in the positions they are already in can leave an
+  # erasure-coded pg wanting to rotate two of its shards, which pg-upmap-items
+  # cannot express and gen_upmap() drops - sending those shards back to crush.
+  # Moving one member of the rotation onto an osd which is not in the pg at all
+  # breaks the rotation, cannot create another one, and leaves the rest of the
+  # shards where they are.
+  for _ in range(len(up)):
+    cycle = rotations(up, target)
+    if not cycle:
+      break
+    i = cycle[0]
+    used.discard(domain_of(target[i], domain_type))
+    free = [b for b in buckets
+            if b not in used and [o for o in bucket_osds.get(b, []) if o not in up]]
+    if not free:
+      used.add(domain_of(target[i], domain_type))
+      for j in cycle:
+        target[j] = up[j]    # nowhere to move it: leave those shards to crush
+      continue
+    bucket = free[spread(pgid, i, 2) % len(free)]
+    used.add(bucket)
+    osds = [o for o in bucket_osds[bucket] if o not in up]
+    target[i] = osds[spread(pgid, i, 3) % len(osds)]
 
   return target
 
@@ -423,7 +479,8 @@ def main():
     raw = reverse_upmap(pg['up'], items) if items else pg['up']
 
     target = pick_target(pgid, raw, pg['acting'],
-                         RULE_DOMAIN.get(POOL_RULE.get(pool)))
+                         RULE_DOMAIN.get(POOL_RULE.get(pool)),
+                         replicated=(pool_type[pool] == 'replicated'))
     if target is None:
       eprint('Skipping pg %s: its crush rule needs more failure domains than '
              'the cluster has osds in' % pgid)
