@@ -49,6 +49,15 @@ MON_TIMEOUT = 300
 OSDS = set()      # the osds which exist, from 'osd ls'
 WEIGHT = {}       # osd id -> the weight it effectively has, from 'osd df'
 UP = None         # the osds which are up, from 'osd dump' (None: do not check)
+
+# the crush tree and the rules, from 'osd crush dump'
+PARENT = {}       # bucket or osd id -> the id of the bucket holding it
+BUCKET_TYPE = {}  # bucket id -> its crush type id
+CHILDREN = {}     # bucket id -> the ids it holds
+RULE_DOMAIN = {}  # crush rule id -> the crush type id it separates pgs over
+POOL_RULE = {}    # pool id (as a string) -> the crush rule it uses
+_domain_of = {}   # (osd id, crush type id) -> the bucket of that type above it
+_domain_osds = {} # crush type id -> ([bucket ids], {bucket id: [usable osds]})
 cluster = None    # the librados connection, or None when using the shell
 use_shell = True
 
@@ -125,6 +134,56 @@ def usable(id):
   to put the data, and one which is down would leave the pg degraded until it
   comes back, which is worse than leaving the pg remapped."""
   return crush_weight(id) > 0 and is_up(id)
+
+def build_topology(crush, osd_dump):
+  """Take the crush tree, the failure domain of every rule and the rule every
+  pool uses out of 'osd crush dump' and 'osd dump'."""
+  type_id = dict((t['name'], t['type_id']) for t in crush.get('types', []))
+  for bucket in crush.get('buckets', []):
+    if '~' in bucket['name']:
+      continue                    # a shadow bucket of the per-device-class tree
+    BUCKET_TYPE[bucket['id']] = bucket['type_id']
+    CHILDREN[bucket['id']] = [item['id'] for item in bucket.get('items', [])]
+    for item in bucket.get('items', []):
+      PARENT[item['id']] = bucket['id']
+  for rule in crush.get('rules', []):
+    # Only a rule which separates the pg over one type of bucket - the usual
+    # 'chooseleaf firstn 0 type host' - is modelled here.  A rule which chooses
+    # several buckets and then several osds inside each of them constrains the
+    # pg in a way this cannot express, so leave its domain unknown.
+    steps = [step.get('type') for step in rule.get('steps', [])
+             if str(step.get('op', '')).startswith('choose')]
+    RULE_DOMAIN[rule['rule_id']] = type_id.get(steps[0]) if len(steps) == 1 else None
+  for pool in osd_dump.get('pools', []):
+    POOL_RULE[str(pool['pool'])] = pool['crush_rule']
+
+def domain_of(osd, domain_type):
+  """The bucket of the failure domain type which holds this osd, or None."""
+  key = (osd, domain_type)
+  if key not in _domain_of:
+    bucket = PARENT.get(osd)
+    while bucket is not None and BUCKET_TYPE.get(bucket) != domain_type:
+      bucket = PARENT.get(bucket)
+    _domain_of[key] = bucket
+  return _domain_of[key]
+
+def osds_under(bucket, found):
+  for child in CHILDREN.get(bucket, []):
+    if child >= 0:
+      found.append(child)
+    else:
+      osds_under(child, found)
+  return found
+
+def domains(domain_type):
+  """Every bucket of the failure domain type, and the osds a pg can be mapped
+  onto inside each of them."""
+  if domain_type not in _domain_osds:
+    buckets = sorted(b for b, t in BUCKET_TYPE.items() if t == domain_type)
+    _domain_osds[domain_type] = (
+      buckets,
+      dict((b, sorted(o for o in osds_under(b, []) if usable(o))) for b in buckets))
+  return _domain_osds[domain_type]
 
 def gen_upmap(up, acting, replicated=False):
   # a pg which is degraded as well as remapped can report an acting set of a
@@ -239,6 +298,16 @@ def main():
     eprint('Error loading existing upmaps')
     sys.exit(1)
   UP = set(o['osd'] for o in osd_dump.get('osds', []) if o.get('up'))
+
+  # discover the crush tree, the failure domain of each rule and the rule each
+  # pool uses
+  try:
+    crush = json.loads(get_cluster_output('ceph osd crush dump -f json',
+                                          {"prefix": "osd crush dump", "format": "json"}))
+  except ValueError:
+    eprint('Error loading the crush map')
+    sys.exit(1)
+  build_topology(crush, osd_dump)
 
   # discover pools replicated or erasure
   pool_type = {}
