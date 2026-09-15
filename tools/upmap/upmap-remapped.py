@@ -185,6 +185,77 @@ def domains(domain_type):
       dict((b, sorted(o for o in osds_under(b, []) if usable(o))) for b in buckets))
   return _domain_osds[domain_type]
 
+def spread(pgid, position, salt=0):
+  """A number which depends only on the pg and the position in it.  The osds a
+  pg is forced to move to are picked with this, so that they are spread over the
+  cluster instead of piling up on the first free bucket, and so that two runs of
+  the script make the same choice."""
+  try:
+    seed = int(str(pgid).split('.')[1], 16)
+  except (IndexError, ValueError):
+    seed = 0
+  return (seed * 2654435761 + position * 40503 + salt * 7) & 0xffffffff
+
+def pick_target(pgid, up, acting, domain_type):
+  """The osds to map this pg onto, in the positions to map them into.
+
+  This is the acting set whenever the acting set is something the pg is allowed
+  to keep, which is the case when osds are added or removed, when the pgs of a
+  pool are split, and when the tunables change.  It is not the case when the
+  crush rule of a pool starts separating its pgs over a different type of
+  bucket: some of the acting osds then sit in the same failure domain, the mon
+  refuses to map the pg onto them, and the pg has to move.
+
+  So keep every acting osd the new failure domain still allows - one per bucket,
+  and those shards do not move - and replace only the others, preferring the osd
+  crush itself picked for the position and otherwise spreading the moves over
+  the buckets which are still free, so that the pgs a rule change forces to move
+  do not all land on the same osds.
+
+  Returns the acting set unchanged when the failure domain of the rule is not
+  known, and None when the pool cannot be placed at all."""
+  if domain_type is None or len(up) != len(acting):
+    return list(acting)
+
+  buckets, bucket_osds = domains(domain_type)
+  if len([b for b in buckets if bucket_osds.get(b)]) < len(up):
+    return None
+
+  target = [None] * len(up)
+  used = set()
+
+  # keep the acting osds whose failure domain the pg can still have
+  for i, osd in enumerate(acting):
+    bucket = domain_of(osd, domain_type)
+    if usable(osd) and bucket is not None and bucket not in used:
+      target[i] = osd
+      used.add(bucket)
+
+  # take crush's own choice wherever the pg is allowed to have it, before
+  # anything else takes the failure domain it sits in
+  for i, osd in enumerate(up):
+    if target[i] is not None:
+      continue
+    bucket = domain_of(osd, domain_type)
+    if osd in OSDS and usable(osd) and bucket is not None and bucket not in used:
+      target[i] = osd
+      used.add(bucket)
+
+  # and spread whatever is still unplaced over the free failure domains
+  for i in range(len(up)):
+    if target[i] is not None:
+      continue
+    free = [b for b in buckets if b not in used and bucket_osds.get(b)]
+    if not free:
+      return None
+    bucket = free[spread(pgid, i) % len(free)]
+    used.add(bucket)
+    osds = bucket_osds[bucket]
+    wanted = [o for o in osds if o in up]   # a shard crush wanted here anyway
+    target[i] = wanted[0] if wanted else osds[spread(pgid, i, 1) % len(osds)]
+
+  return target
+
 def gen_upmap(up, acting, replicated=False):
   # a pg which is degraded as well as remapped can report an acting set of a
   # different length, and there is nothing useful to do with those
@@ -351,7 +422,14 @@ def main():
     items = upmap_by_pgid.get(pgid, [])
     raw = reverse_upmap(pg['up'], items) if items else pg['up']
 
-    pairs = gen_upmap(raw, pg['acting'],
+    target = pick_target(pgid, raw, pg['acting'],
+                         RULE_DOMAIN.get(POOL_RULE.get(pool)))
+    if target is None:
+      eprint('Skipping pg %s: its crush rule needs more failure domains than '
+             'the cluster has osds in' % pgid)
+      continue
+
+    pairs = gen_upmap(raw, target,
                       replicated=(pool_type[pool] == 'replicated'))
 
     # leave a pg which already carries exactly these items alone
