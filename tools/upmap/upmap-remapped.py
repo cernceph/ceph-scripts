@@ -173,6 +173,21 @@ def gen_upmap(up, acting, replicated=False):
 
   return ordered
 
+def reverse_upmap(up, mappings):
+  """Return the up set crush would have given this pg without its pg-upmap-items.
+
+  'pg ls' reports the up set the mon has already applied the pg's upmap items
+  to, while pg-upmap-items is expressed against the mapping crush produces.  The
+  mon applied each item by putting 'to' where 'from' was, so undo them in
+  reverse order."""
+  raw = list(up)
+  for mapping in reversed(mappings):
+    for i, osd in enumerate(raw):
+      if osd == mapping['to']:
+        raw[i] = mapping['from']
+        break
+  return raw
+
 def upmap_pg_items(pgid, mapping):
   if len(mapping):
     print('ceph osd pg-upmap-items %s ' % pgid, end='')
@@ -226,8 +241,8 @@ def main():
     eprint('Error parsing pool types')
     sys.exit(1)
 
-  # discover if each pg is already upmapped
-  has_upmap = set(str(pg['pgid']) for pg in upmaps)
+  # the pg-upmap-items each pg already carries, if any
+  upmap_by_pgid = dict((str(u['pgid']), u.get('mappings', [])) for u in upmaps)
 
   # handle each remapped pg
   print(r'while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
@@ -240,13 +255,7 @@ def main():
     if options.ignore_backfilling and "backfilling" in pg['state']:
       continue
 
-    pgid = pg['pgid']
-
-    if pgid in has_upmap:
-      rm_upmap_pg_items(pgid)
-      num += 1
-      continue
-
+    pgid = str(pg['pgid'])
     pool = pgid.split('.')[0]
     if pool not in pool_type:
       # the pool was deleted between reading the pgs and reading the pools
@@ -256,8 +265,27 @@ def main():
       eprint('Unknown pool type for %s' % pool)
       sys.exit(1)
 
-    pairs = gen_upmap(pg['up'], pg['acting'],
+    # work from the mapping crush produces, not from the one the pg already
+    # carries, because that is what pg-upmap-items is expressed against
+    items = upmap_by_pgid.get(pgid, [])
+    raw = reverse_upmap(pg['up'], items) if items else pg['up']
+
+    pairs = gen_upmap(raw, pg['acting'],
                       replicated=(pool_type[pool] == 'replicated'))
+
+    # leave a pg which already carries exactly these items alone
+    if items and pairs == [(m['from'], m['to']) for m in items]:
+      continue
+
+    # crush already maps the pg where it should be, so the items it carries are
+    # the only thing making it remapped
+    if not pairs:
+      if items:
+        rm_upmap_pg_items(pgid)
+        num += 1
+      continue
+
+    # pg-upmap-items replaces the pg's items, so there is nothing to remove first
     upmap_pg_items(pgid, pairs)
     num += 1
 
