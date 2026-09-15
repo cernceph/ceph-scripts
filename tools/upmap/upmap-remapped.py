@@ -22,6 +22,7 @@
 #
 # - Change crush rules or tunables.
 # - Adding capacity (add new host, rack, ...).
+# - Change the failure domain a crush rule separates its pgs over.
 #
 # In general, the correct procedure for using this script is:
 #
@@ -34,6 +35,20 @@
 # 7. The ceph-mgr balancer in upmap mode should now gradually
 #    remove the upmap-items entries which were created by this
 #    tool.
+#
+# Changing the failure domain of a crush rule - from host to rack,
+# say - is the one case where the acting set of a pg is not a
+# placement the pg is allowed to keep: some of its osds now sit in
+# the same failure domain, and the mon refuses to map the pg onto
+# them.  The script then keeps the acting osds the new rule still
+# allows and replaces only the ones which violate it, so a pool
+# moves the shards it has to move and leaves the others alone.  The
+# procedure is the same one; step 3 is the 'ceph osd pool set
+# <pool> crush_rule <rule>'.
+#
+# A pg whose pool is placed by a rule which chooses buckets and then
+# chooses osds inside them - two shards per rack, say - is left to
+# the mon, since one osd per failure domain does not describe it.
 #
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
