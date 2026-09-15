@@ -48,6 +48,7 @@ MON_TIMEOUT = 300
 # tests set it directly.
 OSDS = set()      # the osds which exist, from 'osd ls'
 WEIGHT = {}       # osd id -> the weight it effectively has, from 'osd df'
+UP = None         # the osds which are up, from 'osd dump' (None: do not check)
 cluster = None    # the librados connection, or None when using the shell
 use_shell = True
 
@@ -116,6 +117,15 @@ def load_osds():
 def crush_weight(id):
   return WEIGHT.get(id, 0)
 
+def is_up(id):
+  return UP is None or id in UP
+
+def usable(id):
+  """Whether a pg may be mapped onto this osd.  An osd which is out has nowhere
+  to put the data, and one which is down would leave the pg degraded until it
+  comes back, which is worse than leaving the pg remapped."""
+  return crush_weight(id) > 0 and is_up(id)
+
 def gen_upmap(up, acting, replicated=False):
   # a pg which is degraded as well as remapped can report an acting set of a
   # different length, and there is nothing useful to do with those
@@ -129,12 +139,12 @@ def gen_upmap(up, acting, replicated=False):
   # e.g. ceph osd pg-upmap-items 4.5fd 603 383 499 804
   if replicated:
     sources = [u for u in up if u not in acting and u in OSDS]
-    dests = [a for a in acting if a not in up and crush_weight(a) > 0]
+    dests = [a for a in acting if a not in up and usable(a)]
     return list(zip(sources, dests))
 
   # On erasure-coded pools every position in the up set matters, so the mappings
   # have to be positional.  Only keep the ones we are allowed to make.
-  mappings = [(u, a) for u, a in zip(up, acting) if u != a and u in OSDS and crush_weight(a) > 0]
+  mappings = [(u, a) for u, a in zip(up, acting) if u != a and u in OSDS and usable(a)]
 
   # Dropping a mapping above leaves its osd in the up set, and mapping onto an
   # osd which is staying in the up set asks for the same osd twice, which the mon
@@ -219,14 +229,16 @@ def main():
     eprint('Error loading remapped pgs')
     sys.exit(1)
 
-  # discover existing upmaps
+  # discover existing upmaps and which osds are up
+  global UP
   try:
-    osd_dump_json = get_cluster_output('ceph osd dump -f json',
-                                       {"prefix": "osd dump", "format": "json"})
-    upmaps = json.loads(osd_dump_json)['pg_upmap_items']
-  except ValueError:
+    osd_dump = json.loads(get_cluster_output('ceph osd dump -f json',
+                                             {"prefix": "osd dump", "format": "json"}))
+    upmaps = osd_dump['pg_upmap_items']
+  except (ValueError, KeyError):
     eprint('Error loading existing upmaps')
     sys.exit(1)
+  UP = set(o['osd'] for o in osd_dump.get('osds', []) if o.get('up'))
 
   # discover pools replicated or erasure
   pool_type = {}
