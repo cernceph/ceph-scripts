@@ -28,8 +28,9 @@
 # 1. Backup your osdmaps, crush maps, ...
 # 2. Set the norebalance flag.
 # 3. Make your change (tunables, add osds, etc...)
-# 4. Run this script a few times. (Remember to | sh)
-# 5. Cluster should now be 100% active+clean.
+# 4. Run this script. (Remember to | sh)  One run is normally enough.
+# 5. Cluster should now be 100% active+clean, apart from any pgs remapped by
+#    OSDs that are swapped (3->4, 4->3) or in a chain (3->4, 6->3, 4->6).
 # 6. Unset the norebalance flag.
 # 7. The ceph-mgr balancer in upmap mode should now gradually
 #    remove the upmap-items entries which were created by this
@@ -162,15 +163,22 @@ def gen_upmap(up, acting, replicated=False):
 
   return ordered
 
+def unapply_upmap_items(up, items):
+  osds = list(up)
+
+  # upmaps get applied left-to-right, so to undo them we need to do it in reverse
+  for source, target in reversed(items):
+    if target in osds and source not in osds:
+      osds[osds.index(target)] = source
+
+  return osds
+
 def upmap_pg_items(pgid, mapping):
   if len(mapping):
     print('ceph osd pg-upmap-items %s ' % pgid, end='')
     for pair in mapping:
       print('%s %s ' % pair, end='')
     print('&')
-
-def rm_upmap_pg_items(pgid):
-  print('ceph osd rm-pg-upmap-items %s &' % pgid)
 
 
 # start here
@@ -188,14 +196,19 @@ except ValueError:
   eprint('Error loading remapped pgs')
   sys.exit(1)
 
-# discover existing upmaps
+# gather the osd dump which includes the upmaps
 try:
   osd_dump_json = get_cluster_output('ceph osd dump -f json',
                                      {"prefix": "osd dump", "format": "json"})
-  upmaps = json.loads(osd_dump_json)['pg_upmap_items']
+  osd_dump = json.loads(osd_dump_json)
 except ValueError:
-  eprint('Error loading existing upmaps')
+  eprint('Error loading osd dump')
   sys.exit(1)
+
+# extract existing upmaps from the osd dump
+upmap_items = {}
+for pg in osd_dump['pg_upmap_items']:
+  upmap_items[pg['pgid']] = [(m['from'], m['to']) for m in pg['mappings']]
 
 # discover pools replicated or erasure
 pool_type = {}
@@ -210,9 +223,6 @@ except IndexError:
   eprint('Error parsing pool types')
   sys.exit(1)
 
-# discover if each pg is already upmapped
-has_upmap = set(str(pg['pgid']) for pg in upmaps)
-
 # handle each remapped pg
 print(r'while ceph status | grep -q "peering\|activating\|laggy"; do sleep 2; done')
 num = 0
@@ -226,11 +236,6 @@ for pg in remapped:
 
   pgid = pg['pgid']
 
-  if pgid in has_upmap:
-    rm_upmap_pg_items(pgid)
-    num += 1
-    continue
-
   pool = pgid.split('.')[0]
   if pool not in pool_type:
     # the pool was deleted between reading the pgs and reading the pools
@@ -240,8 +245,16 @@ for pg in remapped:
     eprint('Unknown pool type for %s' % pool)
     sys.exit(1)
 
-  pairs = gen_upmap(pg['up'], pg['acting'],
+  # un-apply any upmaps to determine the original set of osds for this pg
+  cur_pg_upmap_items = upmap_items.get(pgid, [])
+  orig_mappings = unapply_upmap_items(pg['up'], cur_pg_upmap_items)
+
+  # compare the original pg mappings to where the data is now and create the
+  # necessary upmap-items
+  pairs = gen_upmap(orig_mappings, pg['acting'],
                     replicated=(pool_type[pool] == 'replicated'))
+
+  # print the command to create the upmap-items
   upmap_pg_items(pgid, pairs)
   num += 1
 
