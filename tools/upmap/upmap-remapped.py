@@ -168,7 +168,11 @@ def build_topology(crush, osd_dump):
     # pg in a way this cannot express, so leave its domain unknown.
     steps = [step.get('type') for step in rule.get('steps', [])
              if str(step.get('op', '')).startswith('choose')]
-    RULE_DOMAIN[rule['rule_id']] = type_id.get(steps[0]) if len(steps) == 1 else None
+    domain = type_id.get(steps[0]) if len(steps) == 1 else None
+    # A rule which separates the pg over osds (type 0) has no buckets to keep
+    # the shards apart in, and any set of distinct osds satisfies it, so leave
+    # its domain unknown as well and handle its pgs the way master does.
+    RULE_DOMAIN[rule['rule_id']] = domain if domain else None
   for pool in osd_dump.get('pools', []):
     POOL_RULE[str(pool['pool'])] = pool['crush_rule']
 

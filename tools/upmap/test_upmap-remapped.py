@@ -39,12 +39,15 @@ def crush_dump():
                                {"op": "choose_indep", "type": "rack"},
                                {"op": "chooseleaf_indep", "type": "host"},
                                {"op": "emit"}]},
+      {"rule_id": 3, "steps": [{"op": "take"},
+                               {"op": "chooseleaf_indep", "type": "osd"},
+                               {"op": "emit"}]},
     ],
   }
 
 def osd_dump():
   return {"pools": [{"pool": 1, "crush_rule": 0}, {"pool": 2, "crush_rule": 1},
-                    {"pool": 3, "crush_rule": 2}]}
+                    {"pool": 3, "crush_rule": 2}, {"pool": 4, "crush_rule": 3}]}
 
 @pytest.fixture
 def cluster(monkeypatch):
@@ -71,6 +74,8 @@ def test_build_topology(cluster):
   assert cluster.RULE_DOMAIN[1] == RACK
   # a rule which chooses racks and then hosts inside them is not modelled
   assert cluster.RULE_DOMAIN[2] is None
+  # nor is one whose failure domain is the osd
+  assert cluster.RULE_DOMAIN[3] is None
   assert cluster.POOL_RULE['2'] == 1
   # the shadow bucket is not part of the tree
   assert -100 not in cluster.PARENT.values()
@@ -175,6 +180,15 @@ def test_target_accepts_a_rotation_it_cannot_break(cluster, monkeypatch):
   monkeypatch.setattr(cluster, '_domain_osds', {})
   up, acting = [2, 0], [0, 2]
   assert cluster.pick_target('3.1', up, acting, HOST) == up
+
+
+def test_target_is_acting_on_an_osd_failure_domain(cluster):
+  # rule 3 separates the pg over osds: its domain is unknown, so the pg gets
+  # the acting set and the mapping master would make
+  up, acting = [0, 1, 2, 3], [0, 1, 2, 5]
+  target = cluster.pick_target('4.0', up, acting, cluster.RULE_DOMAIN[3])
+  assert target == acting
+  assert cluster.gen_upmap(up, target) == [(3, 5)]
 
 
 def test_gen_upmap_replicated(cluster, monkeypatch):
