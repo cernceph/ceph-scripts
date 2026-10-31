@@ -59,6 +59,10 @@ import argparse, atexit, json, subprocess, sys
 # on a large cluster with many remapped pgs.
 MON_TIMEOUT = 300
 
+# How 'pg ls' shows a shard of an erasure-coded pg which has no osd: crush could
+# not place it, or the osd holding it is gone.
+CRUSH_ITEM_NONE = 2147483647
+
 # The cluster state every function below works from.  main() fills it in; the
 # tests set it directly.
 OSDS = set()      # the osds which exist, from 'osd ls'
@@ -263,6 +267,21 @@ def rotations(up, target):
       done[j] = True
   return sorted(cycled)
 
+def allowed(osds, domain_type, root=None):
+  """Whether the mon would map a pg onto these osds: each of them usable, under
+  the root of the rule and in a failure domain of its own.  A shard without an
+  osd does not count against it."""
+  seen = set()
+  for osd in osds:
+    if osd == CRUSH_ITEM_NONE:
+      continue
+    bucket = domain_of(osd, domain_type)
+    if (not usable(osd) or not under_root(osd, root) or bucket is None
+        or bucket in seen):
+      return False
+    seen.add(bucket)
+  return True
+
 def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
   """The osds to map this pg onto, in the positions to map them into.
 
@@ -283,13 +302,21 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
   mon refuses a mapping onto any other osd.
 
   Returns the acting set unchanged when the failure domain of the rule is not
-  known, and None when the pool cannot be placed at all."""
+  known, and None when this pg has a shard crush placed which cannot be put in
+  any free failure domain."""
   if domain_type is None or len(up) != len(acting):
     return list(acting)
 
+  # The acting set is a placement the pg may keep: map it back exactly as master
+  # does.  This is what every pg gets after hardware is added or removed, even
+  # when a failure domain is down and a pool has no spare one.  An erasure-coded
+  # pg whose acting set rotates shards between positions goes on below, so that
+  # the rotation can be broken.
+  if (allowed(acting, domain_type, root)
+      and (replicated or not rotations(up, acting))):
+    return list(acting)
+
   buckets, bucket_osds = domains(domain_type, root)
-  if len([b for b in buckets if bucket_osds.get(b)]) < len(up):
-    return None
 
   target = [None] * len(up)
   used = set()
@@ -319,6 +346,11 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
       continue
     free = [b for b in buckets if b not in used and bucket_osds.get(b)]
     if not free:
+      if up[i] == CRUSH_ITEM_NONE:
+        # crush could not place this shard either, with a failure domain down:
+        # leave it unplaced rather than give up on the shards which can move
+        target[i] = up[i]
+        continue
       return None
     bucket = free[spread(pgid, i) % len(free)]
     used.add(bucket)
@@ -534,8 +566,8 @@ def main():
                          replicated=(pool_type[pool] == 'replicated'),
                          root=RULE_ROOT.get(POOL_RULE.get(pool)))
     if target is None:
-      eprint('Skipping pg %s: its crush rule needs more failure domains than '
-             'the cluster has osds in' % pgid)
+      eprint('Skipping pg %s: a shard of it has no free failure domain with a '
+             'usable osd to go to' % pgid)
       continue
 
     pairs = gen_upmap(raw, target,

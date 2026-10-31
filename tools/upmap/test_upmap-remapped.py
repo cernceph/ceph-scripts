@@ -186,6 +186,33 @@ def test_target_avoids_osds_which_are_down(cluster, monkeypatch):
   assert target[2] == 14
 
 
+NONE = 2147483647   # how 'pg ls' shows a shard without an osd
+
+def test_target_is_acting_with_a_failure_domain_down(cluster, monkeypatch):
+  # ec 6+3 over the 9 hosts, and host0 down: the pool has one failure domain
+  # fewer than shards, and every pg is missing a shard.  A pg remapped within
+  # host5 by an osd change is still mapped back the way master does it.
+  monkeypatch.setattr(cluster, 'UP', set(range(18)) - set([0, 1]))
+  monkeypatch.setattr(cluster, '_domain_osds', {})
+  up     = [2, 4, 6, 8, 11, 12, 14, 16, NONE]
+  acting = [2, 4, 6, 8, 10, 12, 14, 16, NONE]
+  target = cluster.pick_target('1.7', up, acting, HOST)
+  assert target == acting
+  assert cluster.gen_upmap(up, target) == [(11, 10)]
+
+
+def test_target_moves_what_it_must_with_a_failure_domain_down(cluster, monkeypatch):
+  # the same pool, but two acting shards share host5 after a rule change: the
+  # pg is fixed on its own, and the shard crush could not place stays unplaced
+  monkeypatch.setattr(cluster, 'UP', set(range(18)) - set([0, 1]))
+  monkeypatch.setattr(cluster, '_domain_osds', {})
+  up     = [2, 4, 6, 8, 10, 12, 14, 16, NONE]
+  acting = [2, 4, 6, 8, 10, 11, 14, 16, NONE]
+  target = cluster.pick_target('1.7', up, acting, HOST)
+  assert target == [2, 4, 6, 8, 10, 12, 14, 16, NONE]
+  assert cluster.gen_upmap(up, target) == []
+
+
 def test_target_gives_up_when_the_rule_cannot_be_satisfied(cluster):
   # four shards to place over three racks
   assert cluster.pick_target('2.0', [0, 1, 2, 3], [0, 1, 2, 3], RACK) is None
