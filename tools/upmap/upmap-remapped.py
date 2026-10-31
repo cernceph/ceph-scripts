@@ -70,9 +70,11 @@ PARENT = {}       # bucket or osd id -> the id of the bucket holding it
 BUCKET_TYPE = {}  # bucket id -> its crush type id
 CHILDREN = {}     # bucket id -> the ids it holds
 RULE_DOMAIN = {}  # crush rule id -> the crush type id it separates pgs over
+RULE_ROOT = {}    # crush rule id -> the bucket its take step starts from
 POOL_RULE = {}    # pool id (as a string) -> the crush rule it uses
 _domain_of = {}   # (osd id, crush type id) -> the bucket of that type above it
-_domain_osds = {} # crush type id -> ([bucket ids], {bucket id: [usable osds]})
+_domain_osds = {} # (crush type id, root) -> ([bucket ids], {bucket id: [usable osds]})
+_root_osds = {}   # take root -> the set of osds under it
 cluster = None    # the librados connection, or None when using the shell
 use_shell = True
 
@@ -155,10 +157,13 @@ def build_topology(crush, osd_dump):
   pool uses out of 'osd crush dump' and 'osd dump'."""
   type_id = dict((t['name'], t['type_id']) for t in crush.get('types', []))
   for bucket in crush.get('buckets', []):
-    if '~' in bucket['name']:
-      continue                    # a shadow bucket of the per-device-class tree
-    BUCKET_TYPE[bucket['id']] = bucket['type_id']
     CHILDREN[bucket['id']] = [item['id'] for item in bucket.get('items', [])]
+    # A shadow bucket of the per-device-class tree is only walked down from the
+    # take step of a 'class' rule, to find the osds the rule can use; the failure
+    # domain of an osd is read from the real tree.
+    if '~' in bucket['name']:
+      continue
+    BUCKET_TYPE[bucket['id']] = bucket['type_id']
     for item in bucket.get('items', []):
       PARENT[item['id']] = bucket['id']
   for rule in crush.get('rules', []):
@@ -173,6 +178,12 @@ def build_topology(crush, osd_dump):
     # the shards apart in, and any set of distinct osds satisfies it, so leave
     # its domain unknown as well and handle its pgs the way master does.
     RULE_DOMAIN[rule['rule_id']] = domain if domain else None
+    # The mon only maps a pg onto osds under the bucket the rule takes - for a
+    # 'class hdd' rule, the hdd shadow tree.  A rule with several take steps is
+    # left unrestricted, as is one whose take step does not name a bucket.
+    takes = [step.get('item') for step in rule.get('steps', [])
+             if step.get('op') == 'take']
+    RULE_ROOT[rule['rule_id']] = takes[0] if len(takes) == 1 else None
   for pool in osd_dump.get('pools', []):
     POOL_RULE[str(pool['pool'])] = pool['crush_rule']
 
@@ -194,15 +205,25 @@ def osds_under(bucket, found):
       osds_under(child, found)
   return found
 
-def domains(domain_type):
-  """Every bucket of the failure domain type, and the osds a pg can be mapped
-  onto inside each of them."""
-  if domain_type not in _domain_osds:
+def under_root(osd, root):
+  """Whether the rule which takes this bucket can map a pg onto this osd."""
+  if root is None:
+    return True
+  if root not in _root_osds:
+    _root_osds[root] = set([root] if root >= 0 else osds_under(root, []))
+  return osd in _root_osds[root]
+
+def domains(domain_type, root=None):
+  """Every bucket of the failure domain type, and the osds a pg of a rule taking
+  this root can be mapped onto inside each of them."""
+  key = (domain_type, root)
+  if key not in _domain_osds:
     buckets = sorted(b for b, t in BUCKET_TYPE.items() if t == domain_type)
-    _domain_osds[domain_type] = (
+    _domain_osds[key] = (
       buckets,
-      dict((b, sorted(o for o in osds_under(b, []) if usable(o))) for b in buckets))
-  return _domain_osds[domain_type]
+      dict((b, sorted(o for o in osds_under(b, [])
+                      if usable(o) and under_root(o, root))) for b in buckets))
+  return _domain_osds[key]
 
 def spread(pgid, position, salt=0):
   """A number which depends only on the pg and the position in it.  The osds a
@@ -242,7 +263,7 @@ def rotations(up, target):
       done[j] = True
   return sorted(cycled)
 
-def pick_target(pgid, up, acting, domain_type, replicated=False):
+def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
   """The osds to map this pg onto, in the positions to map them into.
 
   This is the acting set whenever the acting set is something the pg is allowed
@@ -258,12 +279,15 @@ def pick_target(pgid, up, acting, domain_type, replicated=False):
   the buckets which are still free, so that the pgs a rule change forces to move
   do not all land on the same osds.
 
+  Every osd it picks is under root, the bucket the pool's rule takes, since the
+  mon refuses a mapping onto any other osd.
+
   Returns the acting set unchanged when the failure domain of the rule is not
   known, and None when the pool cannot be placed at all."""
   if domain_type is None or len(up) != len(acting):
     return list(acting)
 
-  buckets, bucket_osds = domains(domain_type)
+  buckets, bucket_osds = domains(domain_type, root)
   if len([b for b in buckets if bucket_osds.get(b)]) < len(up):
     return None
 
@@ -273,7 +297,8 @@ def pick_target(pgid, up, acting, domain_type, replicated=False):
   # keep the acting osds whose failure domain the pg can still have
   for i, osd in enumerate(acting):
     bucket = domain_of(osd, domain_type)
-    if usable(osd) and bucket is not None and bucket not in used:
+    if (usable(osd) and under_root(osd, root) and bucket is not None
+        and bucket not in used):
       target[i] = osd
       used.add(bucket)
 
@@ -283,7 +308,8 @@ def pick_target(pgid, up, acting, domain_type, replicated=False):
     if target[i] is not None:
       continue
     bucket = domain_of(osd, domain_type)
-    if osd in OSDS and usable(osd) and bucket is not None and bucket not in used:
+    if (osd in OSDS and usable(osd) and under_root(osd, root)
+        and bucket is not None and bucket not in used):
       target[i] = osd
       used.add(bucket)
 
@@ -505,7 +531,8 @@ def main():
 
     target = pick_target(pgid, raw, pg['acting'],
                          RULE_DOMAIN.get(POOL_RULE.get(pool)),
-                         replicated=(pool_type[pool] == 'replicated'))
+                         replicated=(pool_type[pool] == 'replicated'),
+                         root=RULE_ROOT.get(POOL_RULE.get(pool)))
     if target is None:
       eprint('Skipping pg %s: its crush rule needs more failure domains than '
              'the cluster has osds in' % pgid)

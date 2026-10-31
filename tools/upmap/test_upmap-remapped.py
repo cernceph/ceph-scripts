@@ -49,11 +49,36 @@ def osd_dump():
   return {"pools": [{"pool": 1, "crush_rule": 0}, {"pool": 2, "crush_rule": 1},
                     {"pool": 3, "crush_rule": 2}, {"pool": 4, "crush_rule": 3}]}
 
+# The same cluster with device classes: the even osd of every host is an hdd, the
+# odd one an ssd, and rule 1 becomes 'take default class hdd; chooseleaf indep 0
+# type rack'.  Like a real crush dump, it carries the default~hdd shadow tree
+# that take step points at.
+def crush_dump_with_classes():
+  crush = crush_dump()
+  crush['buckets'] = [b for b in crush['buckets'] if '~' not in b['name']]
+  for b in list(crush['buckets']):
+    shadow = {'id': b['id'] - 100, 'name': b['name'] + '~hdd', 'type_id': b['type_id']}
+    if b['type_id'] == HOST:
+      shadow['items'] = [i for i in b['items'] if i['id'] % 2 == 0]
+    else:
+      shadow['items'] = [{'id': i['id'] - 100} for i in b['items']]
+    crush['buckets'].append(shadow)
+  crush['rules'][1]['steps'] = [{"op": "take", "item": -101, "item_name": "default~hdd"},
+                                {"op": "chooseleaf_indep", "type": "rack"},
+                                {"op": "emit"}]
+  return crush
+
+def reset(cluster, crush):
+  for name in ('PARENT', 'BUCKET_TYPE', 'CHILDREN', 'RULE_DOMAIN', 'RULE_ROOT',
+               'POOL_RULE', '_domain_of', '_domain_osds', '_root_osds'):
+    getattr(cluster, name).clear()
+  cluster.build_topology(crush, osd_dump())
+
 @pytest.fixture
 def cluster(monkeypatch):
   """An 18 osd cluster, all of them in, up and weighted the same."""
-  for name in ('PARENT', 'BUCKET_TYPE', 'CHILDREN', 'RULE_DOMAIN', 'POOL_RULE',
-               '_domain_of', '_domain_osds'):
+  for name in ('PARENT', 'BUCKET_TYPE', 'CHILDREN', 'RULE_DOMAIN', 'RULE_ROOT',
+               'POOL_RULE', '_domain_of', '_domain_osds', '_root_osds'):
     monkeypatch.setattr(upmap_remapped, name, type(getattr(upmap_remapped, name))())
   monkeypatch.setattr(upmap_remapped, 'OSDS', set(range(18)))
   monkeypatch.setattr(upmap_remapped, 'WEIGHT', dict((o, 1.0) for o in range(18)))
@@ -195,6 +220,35 @@ def test_target_is_acting_on_an_osd_failure_domain(cluster):
   target = cluster.pick_target('4.0', up, acting, cluster.RULE_DOMAIN[3])
   assert target == acting
   assert cluster.gen_upmap(up, target) == [(3, 5)]
+
+
+def test_target_stays_in_the_device_class_of_the_rule(cluster):
+  reset(cluster, crush_dump_with_classes())
+  root = cluster.RULE_ROOT[1]
+  assert root == -101
+  hdd = set(o for o in range(18) if o % 2 == 0)
+  # the failure domain is still read from the real tree
+  assert cluster.domain_of(6, RACK) == -3
+  for ps in range(256):
+    # acting has the shards of rack0 and rack1 swapped, so the rotation breaker
+    # moves one of them to another osd of its rack: it must be another hdd
+    target = cluster.pick_target('2.%x' % ps, [6, 0, 12], [0, 6, 12], RACK, root=root)
+    assert set(target) <= hdd
+    assert sorted(rack_of(o) for o in target) == [0, 1, 2]
+  # and a forced move off a shared rack goes to an hdd as well
+  for ps in range(64):
+    target = cluster.pick_target('2.%x' % ps, [0, 6, 12], [0, 2, 4], RACK, root=root)
+    assert target[0] == 0
+    assert set(target) <= hdd
+
+
+def test_target_does_not_keep_an_osd_outside_the_rule(cluster):
+  # a pool moved from an ssd rule to the hdd rule 1: its ssd shards cannot stay,
+  # even where their rack would allow it
+  reset(cluster, crush_dump_with_classes())
+  target = cluster.pick_target('2.0', [0, 6, 12], [1, 7, 12], RACK,
+                               root=cluster.RULE_ROOT[1])
+  assert target == [0, 6, 12]
 
 
 def test_gen_upmap_replicated(cluster, monkeypatch):
