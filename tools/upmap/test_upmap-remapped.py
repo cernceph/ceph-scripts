@@ -89,6 +89,12 @@ def test_reverse_upmap(cluster):
   assert cluster.reverse_upmap([5, 2, 4], [{'from': 1, 'to': 5},
                                            {'from': 3, 'to': 4}]) == [1, 2, 3]
   assert cluster.reverse_upmap([1, 2, 3], []) == [1, 2, 3]
+  # crush now picks 7 itself, so the mon skipped the item 5 -> 7 and 5 is still
+  # in the pg: undoing it would put 5 in the pg twice
+  assert cluster.reverse_upmap([7, 5, 9], [{'from': 5, 'to': 7}]) == [7, 5, 9]
+  # a skipped item does not stop the ones around it from being undone
+  assert cluster.reverse_upmap([7, 5, 4], [{'from': 5, 'to': 7},
+                                           {'from': 3, 'to': 4}]) == [7, 5, 3]
 
 
 def test_rotations(cluster):

@@ -394,9 +394,15 @@ def reverse_upmap(up, mappings):
   'pg ls' reports the up set the mon has already applied the pg's upmap items
   to, while pg-upmap-items is expressed against the mapping crush produces.  The
   mon applied each item by putting 'to' where 'from' was, so undo them in
-  reverse order."""
+  reverse order.
+
+  The mon skips an item whose 'to' is already in the pg - crush picked that osd
+  itself - or is out, and then 'from' is still in the up set.  Such an item was
+  never applied, so there is nothing to undo."""
   raw = list(up)
   for mapping in reversed(mappings):
+    if mapping['from'] in raw:
+      continue
     for i, osd in enumerate(raw):
       if osd == mapping['to']:
         raw[i] = mapping['from']
