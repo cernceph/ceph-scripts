@@ -308,3 +308,102 @@ def test_gen_upmap_erasure_is_ordered(cluster, monkeypatch):
     [(1, 0), (12, 4), (2, 12), (9, 2), (15, 9)]
   # a rotation has no valid order
   assert gen_upmap([9, 4, 7, 10, 14, 2], [9, 7, 4, 10, 14, 2]) == []
+
+
+def test_weighted_choice(cluster):
+  # each item - an osd or a bucket id - is picked in proportion to its weight
+  weight = {1: 1.0, 3: 3.0}
+  picks = [cluster.weighted_choice([1, 3], weight.get, '1.%x' % ps, 0, 0)
+           for ps in range(2000)]
+  assert 400 < picks.count(1) < 600         # a quarter of them
+  # every item draws its own straw: taking one away, or making it heavier, only
+  # moves the picks it had or gets
+  weight = {1: 1.0, 2: 2.0, 3: 3.0}
+  def picks_with(items, weight):
+    return [cluster.weighted_choice(items, weight.get, '1.%x' % ps, 0, 0)
+            for ps in range(2000)]
+  before = picks_with([1, 2, 3], weight)
+  without_3 = picks_with([1, 2], weight)
+  assert all(x == y for x, y in zip(before, without_3) if x != 3)
+  heavier_3 = picks_with([1, 2, 3], dict(list(weight.items()) + [(3, 6.0)]))
+  assert all(y == 3 for x, y in zip(before, heavier_3) if x != y)
+  assert heavier_3.count(3) > before.count(3)
+
+
+def test_spread_takes_any_pgid(cluster):
+  # a pgid it cannot read still gets a number: the one of pg 0.0
+  for pgid in ('1', '1.3.1', 'x.y'):
+    assert cluster.spread(pgid, 1) == cluster.spread('0.0', 1)
+  # and the draw of 0 it can come to still makes a straw
+  assert cluster.spread('x.y', 0) == 0
+  assert cluster.weighted_choice([0], {0: 1.0}.get, 'x.y', 0, 0) == 0
+
+
+def test_target_spreads_the_forced_moves_by_weight(cluster, monkeypatch):
+  # a size 2 pool whose shards share rack0: one stays, the other goes to rack1
+  # or rack2.  rack1 weighs ten times what rack2 does, and osd 6 half of rack1,
+  # so the moves should go there in about those proportions.
+  weight = dict((o, 1.0) for o in range(18))
+  weight[6] = 5.0
+  weight.update((o, 1.0 / 6) for o in range(12, 18))
+  monkeypatch.setattr(cluster, 'WEIGHT', weight)
+  picks = [cluster.pick_target('1.%x' % ps, [0, 1], [0, 2], RACK,
+                               replicated=True)[1]
+           for ps in range(1000)]
+  to_rack2 = [o for o in picks if rack_of(o) == 2]
+  to_rack1 = [o for o in picks if rack_of(o) == 1]
+  assert 50 < len(to_rack2) < 140             # 1/11 of them
+  assert 0.4 < to_rack1.count(6) / len(to_rack1) < 0.6
+  assert all(rack_of(o) != 0 for o in picks)
+
+
+def test_target_breaks_rotations_by_weight(cluster, monkeypatch):
+  # the rotation breaker moves a shard onto an osd outside the pg, picking the
+  # host and the osd by weight too: host8 weighs 8 of the 21 the free hosts
+  # have, and osd 16 three quarters of host8
+  weight = dict((o, 1.0) for o in range(18))
+  weight[16], weight[17] = 6.0, 2.0
+  monkeypatch.setattr(cluster, 'WEIGHT', weight)
+  moved = []
+  for ps in range(1000):
+    target = cluster.pick_target('3.%x' % ps, [2, 0], [0, 2], HOST)
+    assert cluster.rotations([2, 0], target) == []
+    moved += [o for o in target if o not in (0, 2)]
+  assert len(moved) == 1000
+  to_host8 = [o for o in moved if host_of(o) == 8]
+  assert 300 < len(to_host8) < 460            # 8/21 of them
+  assert 0.65 < to_host8.count(16) / len(to_host8) < 0.85
+
+
+def test_target_spreads_the_pools_apart(cluster):
+  # pgs of two pools with the same placement seed, in the same situation, do not
+  # all make the same choice
+  differ = 0
+  for ps in range(256):
+    assert cluster.spread('1.%x' % ps, 1) != cluster.spread('2.%x' % ps, 1)
+    a = cluster.pick_target('1.%x' % ps, [0, 1], [0, 2], RACK, replicated=True)
+    b = cluster.pick_target('2.%x' % ps, [0, 1], [0, 2], RACK, replicated=True)
+    differ += a != b
+  assert differ > 192
+
+
+def test_target_weighs_only_the_osds_it_can_use(cluster, monkeypatch):
+  # the rotation breaker cannot move a shard onto an osd which is in the pg, so
+  # a host weighs only what its other osds do: osd 0 is in the pg and heavy,
+  # which must not draw the moved shard to host0 and its light osd 1
+  weight = dict((o, 1.0) for o in range(18))
+  weight[0] = 100.0
+  monkeypatch.setattr(cluster, 'WEIGHT', weight)
+  moved = []
+  for ps in range(1000):
+    target = cluster.pick_target('3.%x' % ps, [2, 0], [0, 2], HOST)
+    moved += [o for o in target if o not in (0, 2)]
+  assert moved.count(1) < 100                 # 1/15 of them
+
+
+def test_target_survives_an_osd_listed_twice(cluster):
+  # not something 'pg ls' should report, but the rotation breaker must not
+  # count osd 2 twice against host1 and end up weighing it at nothing
+  target = cluster.pick_target('3.0', [0, 4, 2, 2], [4, 0, 6, 8], HOST)
+  assert len(set(host_of(o) for o in target)) == 4
+  assert cluster.rotations([0, 4, 2, 2], target) == []

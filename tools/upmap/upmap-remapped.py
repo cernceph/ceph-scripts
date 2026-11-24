@@ -53,7 +53,7 @@
 # Hacked by: Dan van der Ster <daniel.vanderster@cern.ch>
 
 
-import argparse, atexit, json, subprocess, sys
+import argparse, atexit, functools, json, math, subprocess, sys
 
 # How long to wait for a mon command.  'pg ls' and 'osd dump' can take a while
 # on a large cluster with many remapped pgs.
@@ -218,27 +218,61 @@ def under_root(osd, root):
   return osd in _root_osds[root]
 
 def domains(domain_type, root=None):
-  """Every bucket of the failure domain type, and the osds a pg of a rule taking
-  this root can be mapped onto inside each of them."""
+  """Every bucket of the failure domain type, the osds a pg of a rule taking
+  this root can be mapped onto inside each of them, and what those osds
+  weigh."""
   key = (domain_type, root)
   if key not in _domain_osds:
     buckets = sorted(b for b, t in BUCKET_TYPE.items() if t == domain_type)
+    bucket_osds = dict((b, sorted(o for o in osds_under(b, [])
+                                  if usable(o) and under_root(o, root)))
+                       for b in buckets)
     _domain_osds[key] = (
-      buckets,
-      dict((b, sorted(o for o in osds_under(b, [])
-                      if usable(o) and under_root(o, root))) for b in buckets))
+      buckets, bucket_osds,
+      dict((b, sum(crush_weight(o) for o in osds))
+           for b, osds in bucket_osds.items()))
   return _domain_osds[key]
 
-def spread(pgid, position, salt=0):
-  """A number which depends only on the pg and the position in it.  The osds a
-  pg is forced to move to are picked with this, so that they are spread over the
-  cluster instead of piling up on the first free bucket, and so that two runs of
-  the script make the same choice."""
+@functools.lru_cache(maxsize=4096)
+def pg_seed(pgid):
+  """The number spread() starts from for this pg.  The pool is part of it: the
+  pgs of different pools with the same placement seed would otherwise all pick
+  alike.  weighted_choice() asks for it once for every item it weighs."""
   try:
-    seed = int(str(pgid).split('.')[1], 16)
-  except (IndexError, ValueError):
-    seed = 0
-  return (seed * 2654435761 + position * 40503 + salt * 7) & 0xffffffff
+    pool, ps = str(pgid).split('.')
+    return int(pool) * 2654435761 + int(ps, 16)
+  except ValueError:
+    return 0
+
+def spread(pgid, position, salt=0, item=0):
+  """A number which depends only on the pg, the position in it and the item
+  drawing it.  The osds a pg is forced to move to are picked with this, so that
+  they are spread over the cluster instead of piling up on the first free
+  bucket, and so that two runs of the script make the same choice."""
+  h = (pg_seed(pgid) * 2654435761 + position * 40503 + salt * 7
+       + item * 2246822519) & 0xffffffff
+  # murmur3's finalizer, so that the numbers for the next item, salt or position
+  # are unrelated instead of lying next to each other
+  h ^= h >> 16
+  h = (h * 0x85ebca6b) & 0xffffffff
+  h ^= h >> 13
+  h = (h * 0xc2b2ae35) & 0xffffffff
+  return h ^ (h >> 16)
+
+def weighted_choice(items, weight, pgid, position, salt):
+  """The item this pg picks for the position, the way a straw2 bucket of crush
+  picks: every item draws a straw of its own, scaled by its weight, and the
+  longest one wins, so that each item is picked in proportion to its weight.  An
+  item's straw depends only on the pg, the position, the salt and the item, so
+  changing the weight of one item, or whether it is offered at all, only moves
+  picks onto or off that item.  Every item has to weigh more than zero."""
+  best, longest = None, None
+  for item in items:
+    draw = (spread(pgid, position, salt, item) + 0.5) / 4294967296.0
+    straw = math.log(draw) / weight(item)
+    if best is None or straw > longest:
+      best, longest = item, straw
+  return best
 
 def rotations(up, target):
   """The positions of an erasure-coded pg whose mapping is part of a rotation.
@@ -295,8 +329,9 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
   So keep every acting osd the new failure domain still allows - one per bucket,
   and those shards do not move - and replace only the others, preferring the osd
   crush itself picked for the position and otherwise spreading the moves over
-  the buckets which are still free, so that the pgs a rule change forces to move
-  do not all land on the same osds.
+  the buckets which are still free, in proportion to their weight as crush
+  would, so that the pgs a rule change forces to move neither all land on the
+  same osds nor fill a small bucket as fast as a big one.
 
   Every osd it picks is under root, the bucket the pool's rule takes, since the
   mon refuses a mapping onto any other osd.
@@ -316,7 +351,7 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
       and (replicated or not rotations(up, acting))):
     return list(acting)
 
-  buckets, bucket_osds = domains(domain_type, root)
+  buckets, bucket_osds, bucket_weight = domains(domain_type, root)
 
   target = [None] * len(up)
   used = set()
@@ -340,7 +375,8 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
       target[i] = osd
       used.add(bucket)
 
-  # and spread whatever is still unplaced over the free failure domains
+  # and spread whatever is still unplaced over the free failure domains, in
+  # proportion to the weight each of them has for the rule
   for i in range(len(up)):
     if target[i] is not None:
       continue
@@ -352,11 +388,12 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
         target[i] = up[i]
         continue
       return None
-    bucket = free[spread(pgid, i) % len(free)]
+    bucket = weighted_choice(free, bucket_weight.get, pgid, i, 0)
     used.add(bucket)
     osds = bucket_osds[bucket]
     wanted = [o for o in osds if o in up]   # a shard crush wanted here anyway
-    target[i] = wanted[0] if wanted else osds[spread(pgid, i, 1) % len(osds)]
+    target[i] = (wanted[0] if wanted
+                 else weighted_choice(osds, crush_weight, pgid, i, 1))
 
   # Only the set of osds matters on a replicated pool, so its mappings never
   # form a rotation.
@@ -375,17 +412,20 @@ def pick_target(pgid, up, acting, domain_type, replicated=False, root=None):
       break
     i = cycle[0]
     used.discard(domain_of(target[i], domain_type))
-    free = [b for b in buckets
-            if b not in used and [o for o in bucket_osds.get(b, []) if o not in up]]
+    # what the osds of each free failure domain which are not in the pg weigh
+    spare = dict((b, sum(crush_weight(o) for o in bucket_osds.get(b, [])
+                         if o not in up))
+                 for b in buckets if b not in used)
+    free = [b for b in buckets if spare.get(b, 0) > 0]
     if not free:
       used.add(domain_of(target[i], domain_type))
       for j in cycle:
         target[j] = up[j]    # nowhere to move it: leave those shards to crush
       continue
-    bucket = free[spread(pgid, i, 2) % len(free)]
+    bucket = weighted_choice(free, spare.get, pgid, i, 2)
     used.add(bucket)
     osds = [o for o in bucket_osds[bucket] if o not in up]
-    target[i] = osds[spread(pgid, i, 3) % len(osds)]
+    target[i] = weighted_choice(osds, crush_weight, pgid, i, 3)
 
   return target
 
